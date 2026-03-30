@@ -1,0 +1,426 @@
+Quiero que generes una aplicación web moderna, responsive, multiusuario y multicliente, lista para producción, que sustituya completamente el sistema actual basado en SharePoint + Microsoft Forms + Microsoft Lists + Power Automate.
+
+## Objetivo general
+La aplicación debe centralizar en una sola plataforma web:
+- la gestión documental por cliente (manuales, tutoriales, vídeos, ayuda)
+- la creación y seguimiento de incidencias/consultas
+- las notificaciones automáticas por email
+- la administración de usuarios, roles y permisos
+- panel técnico interno
+- estadísticas, informes y auditoría
+
+La aplicación debe funcionar con una sola base de datos PostgreSQL alojada en mi VPS, usando arquitectura multitenant con:
+- una misma base de datos
+- un schema separado por cada cliente
+- aislamiento claro entre clientes
+- posibilidad de escalar a nuevos clientes fácilmente
+
+## Requisitos de arquitectura multicliente
+Implementar multitenancy real con estas reglas:
+- una sola base de datos PostgreSQL
+- un schema distinto por cliente
+- los usuarios de un cliente solo pueden ver datos de su propio schema
+- los técnicos internos pueden acceder a varios clientes según permisos
+- debe existir un tenant manager o capa de resolución de tenant
+- el tenant se debe resolver por dominio, subdominio, slug o configuración del usuario autenticado
+- toda consulta debe ir siempre filtrada y aislada por tenant/schema
+- evitar fugas de datos entre clientes
+
+## Objetivo funcional
+La app debe permitir:
+- que cada cliente tenga su portal propio
+- mostrar documentación, ayuda, vídeos y recursos
+- crear tickets/incidencias de forma fácil y amigable
+- adjuntar archivos si es viable
+- hacer seguimiento del estado del ticket
+- enviar notificaciones por email al equipo técnico
+- enviar confirmación al usuario que creó el ticket
+- enviar notificación automática cuando el ticket se resuelva
+- permitir respuestas internas y externas
+- tener trazabilidad completa
+- disponer de dashboard y estadísticas
+- exportar informes a PDF y Excel
+- enviar informes por email
+- registrar auditoría y cambios en base de datos
+
+## Contexto actual a sustituir
+Actualmente cada cliente tiene su propio SharePoint donde:
+- se muestran manuales, tutoriales, vídeos y contenido de ayuda
+- los usuarios suben incidencias mediante Microsoft Forms
+- los datos se guardan en Microsoft Lists
+- Power Automate envía correos al equipo técnico
+Quiero eliminar toda esta dependencia y concentrarlo en una única aplicación web profesional.
+
+## Stack tecnológico deseado
+Usa preferiblemente:
+- Next.js con App Router + TypeScript
+- Tailwind CSS
+- componentes accesibles y reutilizables
+- backend dentro de Next.js o desacoplado si está mejor justificado
+- PostgreSQL
+- ORM recomendado: Prisma si encaja bien con multitenancy por schema; si no, usar repositorios con consultas seguras
+- validación con Zod
+- formularios con React Hook Form
+- autenticación segura con Auth.js / NextAuth o equivalente
+- gráficos con Recharts
+- exportación Excel con ExcelJS
+- exportación PDF server-side
+- envío de emails con Nodemailer o proveedor transaccional configurable
+- tests básicos unitarios/integración/e2e
+- Docker
+- README completo y profesional
+
+## Seguridad
+La seguridad es prioritaria. Implementa al menos:
+- autenticación segura
+- autorización por roles y permisos granulares
+- sesiones seguras
+- aislamiento estricto por tenant
+- validación estricta de inputs
+- consultas parametrizadas
+- protección frente a SQL injection
+- rate limiting en login, creación de tickets y endpoints sensibles
+- manejo seguro de errores
+- logs estructurados
+- auditoría de acciones y cambios
+- variables de entorno para secretos
+- principio de mínimo privilegio
+- ocultar datos sensibles cuando corresponda
+- no exponer secretos en frontend
+- cabeceras de seguridad
+- protección razonable de datos personales
+- control de acceso a documentos por cliente y por rol
+
+## Roles y permisos
+Implementar sistema RBAC flexible, con roles por defecto y permisos ampliables.
+
+### Roles mínimos
+1. superadmin
+- administra toda la plataforma
+- crea clientes/tenants
+- configura schemas
+- gestiona técnicos globales
+- ve estadísticas globales
+- accede a auditoría global
+
+2. admin_cliente
+- administra usuarios de su cliente
+- gestiona documentación de su portal
+- ve todos los tickets de su cliente
+- exporta informes
+- configura notificaciones de su cliente
+
+3. tecnico
+- acceso al panel técnico
+- ve tickets asignados o visibles según permisos
+- cambia estados
+- responde tickets
+- se asigna o es asignado a tickets
+- ve trazabilidad
+- genera informes
+
+4. usuario_cliente
+- crea tickets
+- consulta el estado de sus tickets
+- puede responder o ampliar información
+- accede a documentación y recursos permitidos
+
+5. visor_cliente
+- solo lectura sobre documentación o tickets permitidos
+
+Además, quiero permisos granulares configurables, no solo roles fijos.
+
+## Módulos principales de la aplicación
+
+### 1. Autenticación y acceso
+- login seguro
+- logout
+- recuperación de contraseña opcional
+- gestión de sesión
+- invitación de usuarios
+- activación/desactivación de cuentas
+
+### 2. Portal documental por cliente
+Cada cliente debe tener una sección tipo portal/help center con:
+- manuales
+- tutoriales
+- vídeos
+- preguntas frecuentes
+- enlaces útiles
+- buscador
+- categorías y etiquetas
+- posibilidad de restringir visibilidad por rol
+
+### 3. Ticketing / incidencias
+Este es el núcleo principal.
+Debe permitir:
+- crear ticket desde formulario amigable
+- editar ticket según permisos
+- cambiar estado
+- asignar técnico
+- añadir comentarios
+- historial completo
+- prioridad
+- categoría / tipo de consulta
+- adjuntos
+- fechas de creación, actualización y resolución
+- filtros avanzados
+- búsqueda global
+- vista kanban opcional o tabla avanzada
+- SLA opcional si encaja bien
+
+### Estados sugeridos
+- nuevo
+- pendiente
+- en_revision
+- en_proceso
+- esperando_cliente
+- resuelto
+- cerrado
+
+### Campos del ticket
+Diseña un modelo unificado para soportar los dos formularios actuales y permitir crecer.
+Debe haber:
+- campos comunes obligatorios
+- campos opcionales según cliente o tipo de consulta
+- posibilidad de formularios dinámicos o configurables por tenant
+
+## Formularios actuales a unificar
+
+### Formulario 1: Consignas - Consultas Técnicas
+Campos actuales:
+- Empresa
+- Caso SF
+- Pedido
+- Mochila
+- ID Colegio
+- Nombre del Colegio
+- Email de Compra
+- Email del Alumn@
+- ISBN
+- Tipo de consulta
+- Descripción de la Consulta
+- Observaciones
+
+### Formulario 2: Educare - Consultas Técnicas
+Campos actuales:
+- Colegio
+- Correo del Informador
+- La consulta es sobre (Alumno / Docente)
+- Matrícula Alumno
+- Etapa
+- Curso
+- Asignatura
+- Tipo de Consulta
+- Descripción de la consulta/incidencia
+- Observaciones
+
+## Requisito importante sobre formularios
+Quiero unificar ambos en una única experiencia moderna y amigable.
+Propón e implementa una solución flexible:
+- esquema base común para todos los clientes
+- campos personalizados por tenant si hace falta
+- lógica condicional en formularios
+- validaciones por tipo de cliente
+- formularios fáciles de ampliar sin rehacer todo el sistema
+
+## Panel técnico interno
+Debe existir un panel solo para técnicos e internos con:
+- listado de tickets pendientes
+- filtros por estado, cliente, prioridad, técnico asignado, fecha
+- ver qué técnico está atendiendo cada ticket
+- posibilidad de asignar/reasignar tickets
+- métricas operativas
+- cola de tickets nuevos
+- vista por cliente
+- historial de acciones
+- comentarios internos y externos diferenciados
+
+## Dashboard y estadísticas
+Implementar dashboard con KPIs y gráficos útiles, por ejemplo:
+- tickets totales
+- tickets nuevos
+- tickets pendientes
+- tickets resueltos
+- tickets por cliente
+- tickets por tipo
+- tickets por prioridad
+- tickets por técnico
+- tiempo medio de resolución
+- evolución temporal
+- volumen por colegio, empresa o categoría
+- ranking de incidencias más frecuentes
+
+Gráficos:
+- barras
+- líneas
+- donut/tarta
+- tablas resumen
+- filtros globales por fecha, cliente, estado, tipo, técnico
+
+## Notificaciones por email
+La app debe gestionar automáticamente emails, sustituyendo Power Automate.
+
+Implementar:
+- email al equipo técnico al crear ticket
+- email de confirmación al usuario que lo crea
+- email cuando cambia el estado
+- email al resolverse el ticket
+- email al asignarse a un técnico si se desea
+- plantillas configurables por cliente
+- trazabilidad de envíos
+- reintentos o control básico de fallos
+
+## Exportación e informes
+Permitir:
+- exportar tickets filtrados a Excel
+- exportar tickets filtrados a PDF
+- exportar informe estadístico a PDF
+- exportar detalle de ticket
+- enviar informes por email
+
+## Auditoría y trazabilidad
+Quiero trazabilidad completa en base de datos:
+- quién creó el ticket
+- quién lo modificó
+- cuándo
+- qué campos cambiaron
+- cambios de estado
+- cambios de asignación
+- comentarios
+- eventos de envío de emails
+- accesos importantes
+
+Crear tablas de auditoría y logs de actividad.
+
+## Requisitos de base de datos
+Usar PostgreSQL y diseñar una estructura robusta.
+Debe incluir, como mínimo:
+- gestión de tenants/clientes
+- usuarios
+- roles y permisos
+- tickets
+- comentarios
+- estados
+- categorías
+- adjuntos
+- documentos del portal
+- notificaciones/email logs
+- auditoría
+- configuración por tenant
+- opcionalmente definición dinámica de formularios/campos
+
+## Rendimiento y escalabilidad
+La solución debe estar preparada para producción:
+- paginación server-side
+- filtros eficientes
+- índices adecuados
+- búsquedas optimizadas
+- evitar consultas pesadas innecesarias
+- diseño escalable para múltiples clientes
+- scripts SQL de índices recomendados
+- justificación breve de decisiones de rendimiento
+
+## UX/UI
+La aplicación debe verse moderna, profesional y muy usable:
+- diseño limpio y corporativo
+- responsive real
+- menú lateral o superior
+- navegación clara
+- formularios sencillos para usuarios no técnicos
+- tablas avanzadas
+- estados de carga, vacío y error
+- feedback visual claro
+- control de acciones por permisos
+- modo claro/oscuro opcional
+
+## Arquitectura del proyecto
+Quiero una arquitectura limpia y mantenible, por ejemplo:
+- src/app
+- src/components
+- src/features/auth
+- src/features/tickets
+- src/features/dashboard
+- src/features/documents
+- src/features/admin
+- src/lib
+- src/server
+- src/repositories
+- src/services
+- src/validators
+- src/types
+- src/emails
+- tests
+
+Aplicar:
+- separación de responsabilidades
+- arquitectura por capas
+- DTOs
+- repositorios
+- servicios de negocio
+- tipado estricto
+- validaciones centralizadas
+- componentes reutilizables
+- código limpio
+
+## API o acciones del servidor
+Implementa endpoints o server actions para:
+- login/logout
+- gestión de usuarios
+- gestión de tenants/clientes
+- listado de tickets con filtros
+- detalle de ticket
+- crear ticket
+- actualizar ticket
+- cambiar estado
+- asignar técnico
+- comentarios
+- dashboard y estadísticas
+- documentos y recursos
+- exportación PDF/Excel
+- envío de emails
+- auditoría
+
+## Calidad del código
+Quiero código listo para un equipo profesional:
+- TypeScript estricto
+- linting
+- formateo
+- manejo consistente de errores
+- tests básicos
+- nombres claros
+- sin duplicación innecesaria
+- sin secretos hardcodeados
+- sin mezclar UI con acceso a datos
+- comentarios útiles solo donde aporten valor
+
+## Entregables
+Genera:
+1. estructura completa de carpetas
+2. código completo de la aplicación
+3. esquema/modelado de base de datos PostgreSQL
+4. scripts SQL o migraciones
+5. soporte multitenant por schema
+6. `.env.example`
+7. README completo
+8. tests básicos
+9. documentación breve de endpoints
+10. explicación final de arquitectura y decisiones clave
+
+## Importante
+- No generes una demo superficial.
+- Quiero una base sólida, realista y extensible.
+- Prioriza seguridad, mantenibilidad y escalabilidad.
+- La aplicación debe reemplazar de verdad el flujo actual con SharePoint, Forms, Lists y Power Automate.
+- Debe quedar preparada para varios clientes externos con aislamiento total.
+- Debe estar preparada para desplegarse en mi VPS con PostgreSQL.
+- Si hay decisiones dudosas, elige la opción más robusta y explícalo en el README.
+
+## Salida esperada
+Devuélveme:
+1. estructura de carpetas
+2. código completo
+3. modelo de base de datos
+4. migraciones o scripts SQL
+5. README
+6. explicación breve final de arquitectura
