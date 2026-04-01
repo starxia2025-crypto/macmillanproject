@@ -23,7 +23,7 @@ const updateTenantSchema = z.object({
   logoUrl: z.string().nullable().optional(),
 });
 
-router.get("/", requireAuth, requireRole("superadmin", "tecnico"), async (req, res) => {
+router.get("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), async (req, res) => {
   const page = Math.max(1, Number(req.query["page"]) || 1);
   const limit = Math.min(100, Math.max(1, Number(req.query["limit"]) || 20));
   const search = req.query["search"] as string | undefined;
@@ -68,7 +68,7 @@ router.get("/", requireAuth, requireRole("superadmin", "tecnico"), async (req, r
   res.json({ data: tenantsWithStats, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), async (req, res) => {
   const parsed = createTenantSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "ValidationError", message: parsed.error.message });
@@ -94,7 +94,7 @@ router.post("/", requireAuth, requireRole("superadmin"), async (req, res) => {
   res.status(201).json({ ...tenant[0], totalUsers: 0, totalTickets: 0, openTickets: 0 });
 });
 
-router.get("/:tenantId", requireAuth, requireRole("superadmin", "tecnico", "admin_cliente"), async (req, res) => {
+router.get("/:tenantId", requireAuth, requireRole("superadmin", "tecnico", "admin_cliente", "manager"), async (req, res) => {
   const tenantId = Number(req.params["tenantId"]);
   const authUser = (req as any).user;
 
@@ -127,7 +127,7 @@ router.get("/:tenantId", requireAuth, requireRole("superadmin", "tecnico", "admi
   });
 });
 
-router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente"), async (req, res) => {
+router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
   const tenantId = Number(req.params["tenantId"]);
   const authUser = (req as any).user;
 

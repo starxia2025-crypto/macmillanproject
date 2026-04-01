@@ -102,7 +102,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.json({ data: docs, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
   const authUser = (req as any).user;
   const parsed = createDocumentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -110,7 +110,7 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
     return;
   }
 
-  if (authUser.role === "admin_cliente" && parsed.data.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "manager") && parsed.data.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Cannot create document for another tenant" });
     return;
   }
@@ -182,7 +182,7 @@ router.get("/:documentId", requireAuth, async (req, res) => {
   res.json(doc);
 });
 
-router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
+router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
   const documentId = Number(req.params["documentId"]);
   const authUser = (req as any).user;
   const parsed = updateDocumentSchema.safeParse(req.body);
@@ -198,7 +198,7 @@ router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_clien
     return;
   }
 
-  if (authUser.role === "admin_cliente" && doc.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "manager") && doc.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }

@@ -5,14 +5,14 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useGetMe } from "@workspace/api-client-react";
 import { useEffect } from "react";
 
-import { Layout } from "@/components/layout";
-import Login from "@/pages/login";
+import { MacmillanLayout } from "@/components/layout-macmillan";
+import Login from "@/pages/login-macmillan";
 import Dashboard from "@/pages/dashboard";
 import Tickets from "@/pages/tickets";
 import TicketDetail from "@/pages/tickets/detail";
 import NewTicket from "@/pages/tickets/new-education";
-import Portal from "@/pages/portal";
-import Clients from "@/pages/clients";
+import Portal from "@/pages/portal-admin";
+import Clients from "@/pages/clients-admin";
 import Users from "@/pages/users";
 import Audit from "@/pages/audit";
 import Settings from "@/pages/settings";
@@ -53,9 +53,9 @@ function ProtectedRoute({ component: Component, roles }: { component: any, roles
   }
 
   return (
-    <Layout>
+    <MacmillanLayout>
       <Component />
-    </Layout>
+    </MacmillanLayout>
   );
 }
 
@@ -105,9 +105,9 @@ function Router() {
       </Route>
       
       <Route>
-        <Layout>
+        <MacmillanLayout>
           <NotFound />
-        </Layout>
+        </MacmillanLayout>
       </Route>
     </Switch>
   );

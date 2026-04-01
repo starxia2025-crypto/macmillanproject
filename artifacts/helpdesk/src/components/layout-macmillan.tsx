@@ -1,17 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
-import { 
-  LayoutDashboard, 
-  Ticket, 
-  BookOpen, 
-  Users as UsersIcon, 
-  Building2, 
-  ActivitySquare, 
+import {
+  LayoutDashboard,
+  Ticket,
+  BookOpen,
+  Users as UsersIcon,
+  Building2,
+  ActivitySquare,
   ShieldCheck,
-  Settings, 
+  Settings,
   LogOut,
   Menu,
-  LifeBuoy
+  LifeBuoy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,28 +25,26 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const { data: user } = useGetMe();
   const logout = useLogout({
     mutation: {
-      onSuccess: () => {
-        setLocation("/");
-      }
-    }
+      onSuccess: () => setLocation("/"),
+    },
   });
 
   if (!user) return <>{children}</>;
 
   const navItems = [
-    { href: "/dashboard", label: "Estadísticas", icon: LayoutDashboard, roles: ['superadmin', 'admin_cliente', 'manager', 'tecnico'] },
-    { href: "/tickets", label: "Tickets", icon: Ticket, roles: ['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente'] },
-    { href: "/portal", label: "Portal", icon: BookOpen, roles: ['superadmin', 'admin_cliente', 'manager', 'tecnico', 'usuario_cliente', 'visor_cliente'] },
-    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ['tecnico', 'manager'] },
-    { href: "/clients", label: "Clientes", icon: Building2, roles: ['superadmin', 'admin_cliente', 'tecnico', 'manager'] },
-    { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ['superadmin', 'admin_cliente'] },
-    { href: "/audit", label: "Auditoría", icon: ActivitySquare, roles: ['superadmin', 'admin_cliente'] },
-  ].filter(item => item.roles.includes(user.role));
+    { href: "/dashboard", label: "Estadísticas", icon: LayoutDashboard, roles: ["superadmin", "admin_cliente", "manager", "tecnico"] },
+    { href: "/tickets", label: "Tickets", icon: Ticket, roles: ["superadmin", "admin_cliente", "tecnico", "usuario_cliente"] },
+    { href: "/portal", label: "Portal", icon: BookOpen, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
+    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["tecnico", "manager"] },
+    { href: "/clients", label: "Clientes", icon: Building2, roles: ["superadmin", "admin_cliente", "tecnico", "manager"] },
+    { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ["superadmin", "admin_cliente"] },
+    { href: "/audit", label: "Auditoría", icon: ActivitySquare, roles: ["superadmin", "admin_cliente", "manager"] },
+  ].filter((item) => item.roles.includes(user.role));
 
   const NavLinks = () => (
     <div className="flex flex-col gap-1 w-full">
@@ -57,8 +55,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link key={item.href} href={item.href}>
             <span
               className={`flex items-center gap-3 px-3 py-2 rounded-md transition-all duration-200 cursor-pointer ${
-                isActive 
-                  ? "bg-primary/10 text-primary font-medium" 
+                isActive
+                  ? "bg-primary/10 text-primary font-medium"
                   : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               }`}
             >
@@ -73,7 +71,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950">
-      {/* Barra lateral escritorio */}
       <aside className="hidden md:flex flex-col w-64 border-r bg-white dark:bg-slate-900 z-10">
         <div className="h-16 flex items-center px-6 border-b">
           <Link href="/dashboard">
@@ -85,7 +82,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         <div className="flex-1 py-6 px-4 overflow-y-auto">
           <div className="mb-6 px-3">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Menú Principal</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Menú principal</p>
             <NavLinks />
           </div>
         </div>
@@ -98,7 +95,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </Avatar>
                 <div className="flex flex-col items-start text-sm truncate">
                   <span className="font-medium truncate w-full">{user.name}</span>
-                  <span className="text-xs text-slate-500 truncate w-full">{user.tenantName || 'Sistema'}</span>
+                  <span className="text-xs text-slate-500 truncate w-full">{user.tenantName || "Sistema"}</span>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -118,7 +115,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Cabecera móvil */}
       <div className="flex flex-col flex-1 min-w-0">
         <header className="h-16 flex items-center justify-between px-4 border-b bg-white dark:bg-slate-900 md:hidden sticky top-0 z-20">
           <div className="flex items-center gap-3">
@@ -168,9 +164,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="mx-auto max-w-6xl">
-            {children}
-          </div>
+          <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
     </div>
