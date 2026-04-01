@@ -40,7 +40,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard", label: "Estadísticas", icon: LayoutDashboard, roles: ["superadmin", "admin_cliente", "manager", "tecnico"] },
     { href: "/tickets", label: "Tickets", icon: Ticket, roles: ["superadmin", "admin_cliente", "tecnico", "usuario_cliente"] },
     { href: "/portal", label: "Portal", icon: BookOpen, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
-    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["tecnico", "manager"] },
+    { href: "/admin", label: "Admin", icon: ShieldCheck, roles: ["superadmin", "tecnico", "manager"] },
     { href: "/clients", label: "Clientes", icon: Building2, roles: ["superadmin", "admin_cliente", "tecnico", "manager"] },
     { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ["superadmin", "admin_cliente"] },
     { href: "/audit", label: "Auditoría", icon: ActivitySquare, roles: ["superadmin", "admin_cliente", "manager"] },

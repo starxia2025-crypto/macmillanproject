@@ -1,5 +1,5 @@
 export const roleLabels: Record<string, string> = {
-  superadmin: "Equipo Macmillan",
+  superadmin: "Todos los permisos",
   admin_cliente: "Coordinacion",
   manager: "Jefatura de estudio",
   tecnico: "Soporte tecnico",

@@ -69,7 +69,7 @@ function Router() {
       </Route>
 
       <Route path="/admin">
-        {() => <ProtectedRoute component={Admin} roles={['tecnico', 'manager']} />}
+        {() => <ProtectedRoute component={Admin} roles={['superadmin', 'tecnico', 'manager']} />}
       </Route>
       
       <Route path="/tickets/new">
