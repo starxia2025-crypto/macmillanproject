@@ -73,7 +73,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950">
-      <aside className="z-10 hidden w-64 flex-col border-r bg-white dark:bg-slate-900 md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-white dark:bg-slate-900 md:flex">
         <div className="flex h-16 items-center border-b px-6">
           <Link href="/dashboard">
             <span className="flex cursor-pointer items-center gap-2 text-lg font-bold tracking-tight text-primary">
@@ -82,13 +82,13 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
             </span>
           </Link>
         </div>
-        <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="flex-1 overflow-y-auto px-4 py-6 pb-40">
           <div className="mb-6 px-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Menu principal</p>
             <NavLinks />
           </div>
         </div>
-        <div className="border-t p-4">
+        <div className="absolute inset-x-0 bottom-0 border-t bg-white p-4 dark:bg-slate-900">
           <div className="mb-4 rounded-xl border bg-slate-50 px-4 py-3 dark:bg-slate-800/60">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Colegio activo</p>
             <p className="mt-1 text-lg font-bold leading-tight text-slate-900 dark:text-white">{activeSchoolName}</p>
@@ -121,7 +121,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col md:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-white px-4 dark:bg-slate-900 md:hidden">
           <div className="flex items-center gap-3">
             <Sheet>
@@ -173,7 +173,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
           </DropdownMenu>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:h-screen md:p-8">
           <div className="mx-auto max-w-6xl">{children}</div>
         </main>
       </div>
