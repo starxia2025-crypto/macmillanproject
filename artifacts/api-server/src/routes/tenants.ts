@@ -77,12 +77,20 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
 
   const authUser = (req as any).user;
   try {
-    const tenant = await db.insert(tenantsTable).values({
+    const insertValues: Record<string, unknown> = {
       name: parsed.data.name,
       slug: parsed.data.slug,
-      contactEmail: parsed.data.contactEmail ?? null,
-      primaryColor: parsed.data.primaryColor ?? null,
-    }).returning();
+    };
+
+    if (parsed.data.contactEmail !== undefined) {
+      insertValues["contactEmail"] = parsed.data.contactEmail ?? null;
+    }
+
+    if (parsed.data.primaryColor !== undefined) {
+      insertValues["primaryColor"] = parsed.data.primaryColor ?? null;
+    }
+
+    const tenant = await db.insert(tenantsTable).values(insertValues as any).returning();
 
     await createAuditLog({
       action: "create",

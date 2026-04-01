@@ -99,8 +99,8 @@ export default function ClientsAdmin() {
       data: {
         name: values.name.trim(),
         slug: values.slug.trim().toLowerCase(),
-        contactEmail: values.contactEmail ? values.contactEmail.trim().toLowerCase() : null,
-        primaryColor: values.primaryColor ? values.primaryColor.trim() : null,
+        ...(values.contactEmail ? { contactEmail: values.contactEmail.trim().toLowerCase() } : {}),
+        ...(values.primaryColor ? { primaryColor: values.primaryColor.trim() } : {}),
       },
     });
   }
