@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useCreateTenant, useListTenants } from "@workspace/api-client-react";
+import { useMemo, useState } from "react";
+import { useCreateTenant, useGetMe, useListTenants } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,17 +20,19 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { toast } from "@/hooks/use-toast";
 
 const createTenantSchema = z.object({
-  name: z.string().min(2, "Indica el nombre del cliente"),
-  slug: z.string().min(2, "Indica un slug").regex(/^[a-z0-9-]+$/, "Usa solo minúsculas, números y guiones"),
-  contactEmail: z.string().optional(),
-  primaryColor: z.string().optional(),
+  name: z.string().trim().min(2, "Indica el nombre del cliente"),
+  slug: z.string().trim().min(2, "Indica un slug").regex(/^[a-z0-9-]+$/, "Usa solo minusculas, numeros y guiones"),
+  contactEmail: z.union([z.literal(""), z.string().trim().email("Introduce un email valido")]).optional(),
+  primaryColor: z.union([z.literal(""), z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, "Usa un color hexadecimal valido")]).optional(),
 });
 
 type CreateTenantValues = z.infer<typeof createTenantSchema>;
 
 export default function ClientsAdmin() {
+  const { data: currentUser } = useGetMe();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
@@ -40,6 +42,11 @@ export default function ClientsAdmin() {
     limit: 20,
     search: search || undefined,
   });
+
+  const canCreateTenant = useMemo(
+    () => ["superadmin", "tecnico", "manager"].includes(currentUser?.role || ""),
+    [currentUser?.role],
+  );
 
   const form = useForm<CreateTenantValues>({
     resolver: zodResolver(createTenantSchema),
@@ -54,105 +61,135 @@ export default function ClientsAdmin() {
   const createTenant = useCreateTenant({
     mutation: {
       onSuccess: async () => {
+        toast({
+          title: "Cliente creado",
+          description: "El nuevo cliente ya esta disponible para configurarlo.",
+        });
         setOpen(false);
-        form.reset();
+        form.reset({
+          name: "",
+          slug: "",
+          contactEmail: "",
+          primaryColor: "#2563eb",
+        });
         await refetch();
+      },
+      onError: (error) => {
+        const message = error instanceof Error ? error.message : "No se pudo crear el cliente.";
+        toast({
+          title: "No se pudo crear el cliente",
+          description: message,
+          variant: "destructive",
+        });
       },
     },
   });
 
   function onSubmit(values: CreateTenantValues) {
+    if (!canCreateTenant) {
+      toast({
+        title: "Accion no permitida",
+        description: "Tu perfil no tiene permisos para crear clientes.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     createTenant.mutate({
       data: {
-        name: values.name,
-        slug: values.slug,
-        contactEmail: values.contactEmail || null,
-        primaryColor: values.primaryColor || null,
+        name: values.name.trim(),
+        slug: values.slug.trim().toLowerCase(),
+        contactEmail: values.contactEmail ? values.contactEmail.trim().toLowerCase() : null,
+        primaryColor: values.primaryColor ? values.primaryColor.trim() : null,
       },
     });
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Clientes y redes escolares</h1>
-          <p className="text-slate-500 mt-1">Gestiona grupos educativos, colegios asociados y su operación de soporte.</p>
+          <p className="mt-1 text-slate-500">Gestiona grupos educativos, colegios asociados y su operacion de soporte.</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 shrink-0">
-              <Plus className="h-4 w-4" />
-              Añadir cliente
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Alta y configuración de cliente</DialogTitle>
-              <DialogDescription>Crea un nuevo grupo educativo o cliente para empezar a configurarlo.</DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Nombre</FormLabel>
-                      <FormControl><Input placeholder="Ej. Educare" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="slug"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Slug</FormLabel>
-                      <FormControl><Input placeholder="educare" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="contactEmail"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Email de contacto</FormLabel>
-                      <FormControl><Input placeholder="soporte@cliente.es" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="primaryColor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Color principal</FormLabel>
-                      <FormControl><Input placeholder="#2563eb" {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                  <Button type="submit" disabled={createTenant.isPending}>Crear cliente</Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
+        {canCreateTenant && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="shrink-0 gap-2">
+                <Plus className="h-4 w-4" />
+                Anadir cliente
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Alta y configuracion de cliente</DialogTitle>
+                <DialogDescription>Crea un nuevo grupo educativo o cliente para empezar a configurarlo.</DialogDescription>
+              </DialogHeader>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <FormField
+                    control={form.control}
+                    name="name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Nombre</FormLabel>
+                        <FormControl><Input placeholder="Ej. Educare" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="slug"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Slug</FormLabel>
+                        <FormControl><Input placeholder="educare" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="contactEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email de contacto</FormLabel>
+                        <FormControl><Input placeholder="soporte@cliente.es" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="primaryColor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Color principal</FormLabel>
+                        <FormControl><Input placeholder="#2563eb" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                    <Button type="submit" disabled={createTenant.isPending}>
+                      {createTenant.isPending ? "Creando..." : "Crear cliente"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
-      <Card className="p-4 flex gap-4">
+      <Card className="flex gap-4 p-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             placeholder="Buscar clientes por nombre, dominio o correo..."
-            className="pl-9 w-full max-w-md"
+            className="w-full max-w-md pl-9"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -162,7 +199,7 @@ export default function ClientsAdmin() {
         </div>
       </Card>
 
-      <div className="bg-white dark:bg-slate-900 border rounded-xl overflow-hidden shadow-sm">
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm dark:bg-slate-900">
         <Table>
           <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
             <TableRow>
@@ -178,12 +215,12 @@ export default function ClientsAdmin() {
             {isLoading ? (
               [...Array(5)].map((_, i) => (
                 <TableRow key={i}>
-                  <TableCell><div className="h-5 w-48 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" /></TableCell>
-                  <TableCell><div className="h-6 w-16 bg-slate-100 dark:bg-slate-800 rounded-full animate-pulse" /></TableCell>
-                  <TableCell><div className="h-5 w-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse mx-auto" /></TableCell>
-                  <TableCell><div className="h-5 w-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse mx-auto" /></TableCell>
-                  <TableCell><div className="h-5 w-10 bg-slate-100 dark:bg-slate-800 rounded animate-pulse mx-auto" /></TableCell>
-                  <TableCell><div className="h-5 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse ml-auto" /></TableCell>
+                  <TableCell><div className="h-5 w-48 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
+                  <TableCell><div className="h-6 w-16 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" /></TableCell>
+                  <TableCell><div className="mx-auto h-5 w-10 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
+                  <TableCell><div className="mx-auto h-5 w-10 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
+                  <TableCell><div className="mx-auto h-5 w-10 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
+                  <TableCell><div className="ml-auto h-5 w-24 animate-pulse rounded bg-slate-100 dark:bg-slate-800" /></TableCell>
                 </TableRow>
               ))
             ) : tenantsData?.data.length === 0 ? (
@@ -197,7 +234,7 @@ export default function ClientsAdmin() {
                 <TableRow key={tenant.id} className="group">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400">
                         <Building2 className="h-5 w-5" />
                       </div>
                       <div>
@@ -234,9 +271,9 @@ export default function ClientsAdmin() {
         </Table>
 
         {tenantsData && tenantsData.totalPages > 1 && (
-          <div className="p-4 border-t flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+          <div className="flex items-center justify-between border-t bg-slate-50/50 p-4 dark:bg-slate-900/50">
             <span className="text-sm text-slate-500">
-              Mostrando {(page - 1) * 20 + 1}–{Math.min(page * 20, tenantsData.total)} de {tenantsData.total}
+              Mostrando {(page - 1) * 20 + 1}-{Math.min(page * 20, tenantsData.total)} de {tenantsData.total}
             </span>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Anterior</Button>
