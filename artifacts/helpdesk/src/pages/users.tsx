@@ -31,6 +31,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "@/hooks/use-toast";
+import { getRoleLabel } from "@/lib/role-labels";
 
 const createUserSchema = z.object({
   name: z.string().min(2, "Indica el nombre del usuario"),
@@ -41,15 +42,6 @@ const createUserSchema = z.object({
 });
 
 type CreateUserValues = z.infer<typeof createUserSchema>;
-
-const roleLabels: Record<string, string> = {
-  superadmin: "Super Admin",
-  admin_cliente: "Admin Cliente",
-  manager: "Manager",
-  tecnico: "Tecnico",
-  usuario_cliente: "Usuario",
-  visor_cliente: "Visor",
-};
 
 export default function Users() {
   const { data: currentUser } = useGetMe();
@@ -83,7 +75,7 @@ export default function Users() {
       ];
     }
 
-    return ["manager", "usuario_cliente", "visor_cliente"];
+    return ["admin_cliente", "manager", "usuario_cliente", "visor_cliente"];
   }, [currentUser?.role]);
 
   const form = useForm<CreateUserValues>({
@@ -187,7 +179,7 @@ export default function Users() {
             <DialogHeader>
               <DialogTitle>Crear nuevo usuario</DialogTitle>
               <DialogDescription>
-                Da de alta accesos para el cliente, responsables de centro o equipo tecnico.
+                Da de alta accesos para coordinacion, jefatura de estudio, profesorado o equipo tecnico.
               </DialogDescription>
             </DialogHeader>
             <Form {...form}>
@@ -237,7 +229,7 @@ export default function Users() {
                           <SelectContent>
                             {availableRoles.map((role) => (
                               <SelectItem key={role} value={role}>
-                                {roleLabels[role] || role}
+                                {getRoleLabel(role)}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -338,17 +330,17 @@ export default function Users() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[220px]">
               <SelectValue placeholder="Rol" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los roles</SelectItem>
-              {currentUser?.role === "superadmin" && <SelectItem value="superadmin">Super Admin</SelectItem>}
-              <SelectItem value="admin_cliente">Admin Cliente</SelectItem>
-              <SelectItem value="manager">Manager</SelectItem>
-              {currentUser?.role === "superadmin" && <SelectItem value="tecnico">Tecnico</SelectItem>}
-              <SelectItem value="usuario_cliente">Usuario</SelectItem>
-              <SelectItem value="visor_cliente">Visor</SelectItem>
+              {currentUser?.role === "superadmin" && <SelectItem value="superadmin">{getRoleLabel("superadmin")}</SelectItem>}
+              <SelectItem value="admin_cliente">{getRoleLabel("admin_cliente")}</SelectItem>
+              <SelectItem value="manager">{getRoleLabel("manager")}</SelectItem>
+              {currentUser?.role === "superadmin" && <SelectItem value="tecnico">{getRoleLabel("tecnico")}</SelectItem>}
+              <SelectItem value="usuario_cliente">{getRoleLabel("usuario_cliente")}</SelectItem>
+              <SelectItem value="visor_cliente">{getRoleLabel("visor_cliente")}</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="icon" type="button">

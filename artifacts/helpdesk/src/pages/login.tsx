@@ -100,7 +100,7 @@ export default function Login() {
         </div>
 
         <div className="relative z-10 text-sm text-primary-foreground/60">
-          © {new Date().getFullYear()} HelpDesk Pro. Todos los derechos reservados.
+          © {new Date().getFullYear()} Macmillan Iberia. Todos los derechos reservados.
         </div>
       </div>
 

@@ -58,7 +58,7 @@ export default function Settings() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Organización / Cliente</Label>
-                  <Input defaultValue={user?.tenantName || 'HelpDesk Pro Sistema'} disabled className="bg-slate-50" />
+                  <Input defaultValue={user?.tenantName || 'Soporte Macmillan Sistema'} disabled className="bg-slate-50" />
                 </div>
               </div>
             </CardContent>
@@ -70,7 +70,7 @@ export default function Settings() {
           <Card>
             <CardHeader>
               <CardTitle>Apariencia</CardTitle>
-              <CardDescription>Personaliza cómo se ve HelpDesk Pro en tu dispositivo.</CardDescription>
+              <CardDescription>Personaliza cómo se ve Soporte Macmillan en tu dispositivo.</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-3 gap-4">
