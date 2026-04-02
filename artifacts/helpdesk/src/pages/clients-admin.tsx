@@ -51,7 +51,7 @@ const textPalette = [
 ];
 
 const tenantFormSchema = z.object({
-  name: z.string().trim().min(2, "Indica el nombre del cliente"),
+  name: z.string().trim().min(2, "Indica el nombre del colegio"),
   contactEmail: z.union([z.literal(""), z.string().trim().email("Introduce un email valido")]).optional(),
   sidebarBackgroundColor: z.string().min(1, "Selecciona un color para el menu"),
   sidebarTextColor: z.string().min(1, "Selecciona un color de texto"),
@@ -188,17 +188,17 @@ export default function ClientsAdmin() {
     mutation: {
       onSuccess: async () => {
         toast({
-          title: "Cliente creado",
-          description: "El nuevo cliente ya esta disponible para configurarlo.",
+          title: "Colegio creado",
+          description: "El nuevo colegio ya esta disponible para configurarlo.",
         });
         setOpen(false);
         resetTenantForm();
         await refetch();
       },
       onError: (error) => {
-        const message = error instanceof Error ? error.message : "No se pudo crear el cliente.";
+        const message = error instanceof Error ? error.message : "No se pudo crear el colegio.";
         toast({
-          title: "No se pudo crear el cliente",
+          title: "No se pudo crear el colegio",
           description: message,
           variant: "destructive",
         });
@@ -209,23 +209,23 @@ export default function ClientsAdmin() {
   const updateTenant = useUpdateTenant({
     mutation: {
       onSuccess: async (_, variables) => {
-        const action = variables.data.active === false ? "Cliente desactivado" : variables.data.active === true ? "Cliente reactivado" : "Cliente actualizado";
+        const action = variables.data.active === false ? "Colegio desactivado" : variables.data.active === true ? "Colegio reactivado" : "Colegio actualizado";
         toast({
           title: action,
           description: variables.data.active === false
-            ? "El cliente ha quedado sin acceso operativo."
+            ? "El colegio ha quedado sin acceso operativo."
             : variables.data.active === true
-              ? "El cliente vuelve a estar disponible para su equipo."
-              : "Los cambios del cliente ya estan guardados.",
+              ? "El colegio vuelve a estar disponible para su equipo."
+              : "Los cambios del colegio ya estan guardados.",
         });
         setOpen(false);
         resetTenantForm();
         await refetch();
       },
       onError: (error) => {
-        const message = error instanceof Error ? error.message : "No se pudo actualizar el cliente.";
+        const message = error instanceof Error ? error.message : "No se pudo actualizar el colegio.";
         toast({
-          title: "No se pudo actualizar el cliente",
+          title: "No se pudo actualizar el colegio",
           description: message,
           variant: "destructive",
         });
@@ -263,7 +263,7 @@ export default function ClientsAdmin() {
     if (!canManageTenants) {
       toast({
         title: "Accion no permitida",
-        description: "Tu perfil no tiene permisos para gestionar clientes.",
+        description: "Tu perfil no tiene permisos para gestionar colegios.",
         variant: "destructive",
       });
       return;
@@ -355,8 +355,8 @@ export default function ClientsAdmin() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Clientes y redes escolares</h1>
-          <p className="mt-1 text-slate-500">Gestiona grupos educativos, colegios asociados y su operacion de soporte.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Colegios y redes escolares</h1>
+          <p className="mt-1 text-slate-500">Gestiona colegios, grupos educativos asociados y su operacion de soporte.</p>
         </div>
         {canManageTenants && (
           <Dialog
@@ -369,15 +369,15 @@ export default function ClientsAdmin() {
             <DialogTrigger asChild>
               <Button className="shrink-0 gap-2" onClick={openCreateDialog}>
                 <Plus className="h-4 w-4" />
-                Anadir cliente
+                Anadir colegio
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] max-w-3xl overflow-hidden p-0">
               <DialogHeader className="border-b px-6 pb-4 pt-6">
-                <DialogTitle>{editingTenant ? "Editar cliente" : "Alta y configuracion de cliente"}</DialogTitle>
+                <DialogTitle>{editingTenant ? "Editar colegio" : "Alta y configuracion de colegio"}</DialogTitle>
                 <DialogDescription>
                   {editingTenant
-                    ? "Actualiza branding, correos y accesos directos del cliente."
+                    ? "Actualiza branding, correos y accesos directos del colegio."
                     : "Crea un nuevo grupo educativo, elige los colores del menu lateral y define accesos directos para su equipo."}
                 </DialogDescription>
               </DialogHeader>
@@ -457,7 +457,7 @@ export default function ClientsAdmin() {
                         <div className="space-y-2 text-sm">
                           <div className="rounded-md px-3 py-2" style={{ backgroundColor: `${sidebarTextColor}22` }}>Tickets de consulta</div>
                           <div className="rounded-md px-3 py-2">Miembros del equipo</div>
-                          <div className="mt-3 border-t border-white/20 pt-3 text-base font-bold">{form.watch("name") || "Nombre del cliente"}</div>
+                          <div className="mt-3 border-t border-white/20 pt-3 text-base font-bold">{form.watch("name") || "Nombre del colegio"}</div>
                         </div>
                       </div>
                     </div>
@@ -541,7 +541,7 @@ export default function ClientsAdmin() {
                   <DialogFooter className="border-t bg-white px-6 py-4">
                     <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
                     <Button type="submit" disabled={isSaving}>
-                      {isSaving ? "Guardando..." : editingTenant ? "Guardar cambios" : "Crear cliente"}
+                      {isSaving ? "Guardando..." : editingTenant ? "Guardar cambios" : "Crear colegio"}
                     </Button>
                   </DialogFooter>
                 </form>
@@ -570,7 +570,7 @@ export default function ClientsAdmin() {
         <Table>
           <TableHeader className="bg-slate-50 dark:bg-slate-800/50">
             <TableRow>
-              <TableHead className="font-semibold">Nombre del Cliente</TableHead>
+              <TableHead className="font-semibold">Nombre del Colegio</TableHead>
               <TableHead className="font-semibold">Estado</TableHead>
               <TableHead className="text-center font-semibold">Usuarios</TableHead>
               <TableHead className="text-center font-semibold">Tickets Abiertos</TableHead>
@@ -595,7 +595,7 @@ export default function ClientsAdmin() {
             ) : tenantsData?.data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-48 text-center text-slate-500">
-                  No se encontraron clientes.
+                  No se encontraron colegios.
                 </TableCell>
               </TableRow>
             ) : (
@@ -648,11 +648,11 @@ export default function ClientsAdmin() {
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
-                            <AlertDialogTitle>{tenant.active ? "Desactivar cliente" : "Reactivar cliente"}</AlertDialogTitle>
+                            <AlertDialogTitle>{tenant.active ? "Desactivar colegio" : "Reactivar colegio"}</AlertDialogTitle>
                             <AlertDialogDescription>
                               {tenant.active
-                                ? "Se desactivara el acceso del cliente y quedara fuera de operacion hasta reactivarlo."
-                                : "El cliente volvera a estar operativo y visible para su equipo."}
+                                ? "Se desactivara el acceso del colegio y quedara fuera de operacion hasta reactivarlo."
+                                : "El colegio volvera a estar operativo y visible para su equipo."}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

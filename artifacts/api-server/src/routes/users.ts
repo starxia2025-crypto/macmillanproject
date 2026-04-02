@@ -73,7 +73,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.json({ data: users, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin", "admin_cliente"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
   const authUser = (req as any).user;
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -153,7 +153,7 @@ router.get("/:userId", requireAuth, async (req, res) => {
   res.json(user);
 });
 
-router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente"), async (req, res) => {
+router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
   const userId = Number(req.params["userId"]);
   const authUser = (req as any).user;
   const parsed = updateUserSchema.safeParse(req.body);

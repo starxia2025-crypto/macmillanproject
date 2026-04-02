@@ -84,15 +84,15 @@ function Router() {
       </Route>
       
       <Route path="/clients">
-        {() => <ProtectedRoute component={Clients} roles={['superadmin']} />}
+        {() => <ProtectedRoute component={Clients} roles={['superadmin', 'tecnico']} />}
       </Route>
       
       <Route path="/users">
-        {() => <ProtectedRoute component={Users} roles={['superadmin', 'admin_cliente']} />}
+        {() => <ProtectedRoute component={Users} roles={['superadmin', 'admin_cliente', 'tecnico']} />}
       </Route>
       
       <Route path="/audit">
-        {() => <ProtectedRoute component={Audit} roles={['superadmin']} />}
+        {() => <ProtectedRoute component={Audit} roles={['superadmin', 'tecnico']} />}
       </Route>
       
       <Route path="/settings">
