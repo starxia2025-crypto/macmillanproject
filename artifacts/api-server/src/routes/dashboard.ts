@@ -14,7 +14,7 @@ function buildTenantCondition(tenantId: number | null | undefined, authUser: any
   return undefined;
 }
 
-router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
   const dateFrom = req.query["dateFrom"] as string | undefined;
@@ -77,7 +77,7 @@ router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "ma
   });
 });
 
-router.get("/tickets-by-status", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/tickets-by-status", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
 
@@ -108,7 +108,7 @@ router.get("/tickets-by-status", requireAuth, requireRole("superadmin", "admin_c
   })));
 });
 
-router.get("/tickets-by-priority", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/tickets-by-priority", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
 
@@ -136,7 +136,7 @@ router.get("/tickets-by-priority", requireAuth, requireRole("superadmin", "admin
   })));
 });
 
-router.get("/tickets-over-time", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/tickets-over-time", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
   const period = (req.query["period"] as string) || "month";
@@ -186,7 +186,7 @@ router.get("/tickets-over-time", requireAuth, requireRole("superadmin", "admin_c
   );
 });
 
-router.get("/tickets-by-technician", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/tickets-by-technician", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
 
@@ -215,7 +215,7 @@ router.get("/tickets-by-technician", requireAuth, requireRole("superadmin", "adm
   })));
 });
 
-router.get("/recent-activity", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/recent-activity", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
   const limit = Math.min(50, Math.max(1, Number(req.query["limit"]) || 10));
@@ -262,7 +262,7 @@ router.get("/recent-activity", requireAuth, requireRole("superadmin", "admin_cli
   );
 });
 
-router.get("/top-categories", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico"), async (req, res) => {
+router.get("/top-categories", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
   const limit = Math.min(20, Math.max(1, Number(req.query["limit"]) || 5));

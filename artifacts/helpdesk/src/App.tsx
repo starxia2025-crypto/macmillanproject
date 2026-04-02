@@ -64,19 +64,19 @@ function Router() {
       <Route path="/" component={Login} />
       
       <Route path="/dashboard">
-        {() => <ProtectedRoute component={Dashboard} roles={['superadmin', 'admin_cliente', 'manager', 'tecnico']} />}
+        {() => <ProtectedRoute component={Dashboard} roles={['superadmin', 'admin_cliente', 'manager', 'tecnico', 'visor_cliente']} />}
       </Route>
 
       <Route path="/tickets/new">
-        {() => <ProtectedRoute component={NewTicket} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente']} />}
+        {() => <ProtectedRoute component={NewTicket} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente', 'visor_cliente']} />}
       </Route>
       
       <Route path="/tickets/:id">
-        {() => <ProtectedRoute component={TicketDetail} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente']} />}
+        {() => <ProtectedRoute component={TicketDetail} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente', 'visor_cliente']} />}
       </Route>
       
       <Route path="/tickets">
-        {() => <ProtectedRoute component={Tickets} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente']} />}
+        {() => <ProtectedRoute component={Tickets} roles={['superadmin', 'admin_cliente', 'tecnico', 'usuario_cliente', 'visor_cliente']} />}
       </Route>
       
       <Route path="/portal">
@@ -88,7 +88,7 @@ function Router() {
       </Route>
       
       <Route path="/users">
-        {() => <ProtectedRoute component={Users} roles={['superadmin', 'admin_cliente', 'tecnico']} />}
+        {() => <ProtectedRoute component={Users} roles={['superadmin', 'admin_cliente', 'tecnico', 'visor_cliente']} />}
       </Route>
       
       <Route path="/audit">

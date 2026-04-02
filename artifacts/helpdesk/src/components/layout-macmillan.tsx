@@ -49,11 +49,11 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const tileColor = sidebarTextColor === "#ffffff" || sidebarTextColor === "#f8fafc" ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.65)";
 
   const navItems = [
-    { href: "/dashboard", label: "Estadisticas", icon: LayoutDashboard, roles: ["superadmin", "admin_cliente", "manager", "tecnico"] },
-    { href: "/tickets", label: "Tickets de consulta", icon: Ticket, roles: ["superadmin", "admin_cliente", "tecnico", "usuario_cliente"] },
+    { href: "/dashboard", label: "Estadisticas", icon: LayoutDashboard, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"] },
+    { href: "/tickets", label: "Tickets de consulta", icon: Ticket, roles: ["superadmin", "admin_cliente", "tecnico", "usuario_cliente", "visor_cliente"] },
     { href: "/portal", label: "Centro de ayuda", icon: BookOpen, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
     { href: "/clients", label: "Colegios", icon: Building2, roles: ["superadmin", "tecnico"] },
-    { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ["superadmin", "admin_cliente", "tecnico"] },
+    { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ["superadmin", "admin_cliente", "tecnico", "visor_cliente"] },
     { href: "/audit", label: "Auditoria", icon: ActivitySquare, roles: ["superadmin", "tecnico"] },
   ].filter((item) => item.roles.includes(user.role));
 

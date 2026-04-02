@@ -4,7 +4,7 @@ export const roleLabels: Record<string, string> = {
   manager: "Jefatura de estudio",
   tecnico: "Soporte tecnico",
   usuario_cliente: "Profesorado",
-  visor_cliente: "Consulta",
+  visor_cliente: "Comerciales",
 };
 
 export function getRoleLabel(role: string) {

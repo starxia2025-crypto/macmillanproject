@@ -40,7 +40,7 @@ const updateDocumentSchema = z.object({
   published: z.boolean().optional(),
 });
 
-router.post("/upload", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
+router.post("/upload", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
 
   try {
@@ -66,7 +66,7 @@ router.post("/upload", requireAuth, requireRole("superadmin", "admin_cliente", "
       return;
     }
 
-    if ((authUser.role === "admin_cliente" || authUser.role === "manager") && tenantId !== authUser.tenantId) {
+    if ((authUser.role === "admin_cliente" || authUser.role === "manager" || authUser.role === "visor_cliente") && tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "No puedes subir archivos para otro cliente." });
       return;
     }
@@ -123,7 +123,7 @@ router.get("/", requireAuth, async (req, res) => {
   if (type) conditions.push(eq(documentsTable.type, type));
 
   // Non-admin only see published documents
-  if (!["superadmin", "admin_cliente"].includes(authUser.role)) {
+  if (!["superadmin", "admin_cliente", "visor_cliente"].includes(authUser.role)) {
     conditions.push(eq(documentsTable.published, true));
   }
 
@@ -168,7 +168,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.json({ data: docs, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const parsed = createDocumentSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -176,7 +176,7 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
     return;
   }
 
-  if ((authUser.role === "admin_cliente" || authUser.role === "manager") && parsed.data.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "manager" || authUser.role === "visor_cliente") && parsed.data.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Cannot create document for another tenant" });
     return;
   }
@@ -248,7 +248,7 @@ router.get("/:documentId", requireAuth, async (req, res) => {
   res.json(doc);
 });
 
-router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager"), async (req, res) => {
+router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager", "visor_cliente"), async (req, res) => {
   const documentId = Number(req.params["documentId"]);
   const authUser = (req as any).user;
   const parsed = updateDocumentSchema.safeParse(req.body);
@@ -264,7 +264,7 @@ router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_clien
     return;
   }
 
-  if ((authUser.role === "admin_cliente" || authUser.role === "manager") && doc.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "manager" || authUser.role === "visor_cliente") && doc.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }
@@ -285,7 +285,7 @@ router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_clien
   });
 });
 
-router.delete("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente"), async (req, res) => {
+router.delete("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "visor_cliente"), async (req, res) => {
   const documentId = Number(req.params["documentId"]);
   const authUser = (req as any).user;
 
@@ -296,7 +296,7 @@ router.delete("/:documentId", requireAuth, requireRole("superadmin", "admin_clie
     return;
   }
 
-  if (authUser.role === "admin_cliente" && doc.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "visor_cliente") && doc.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }

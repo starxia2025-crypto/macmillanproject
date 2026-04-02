@@ -73,7 +73,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.json({ data: users, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -82,7 +82,7 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
   }
 
   // admin_cliente can only create users in their own tenant
-  if (authUser.role === "admin_cliente") {
+  if (authUser.role === "admin_cliente" || authUser.role === "visor_cliente") {
     if (parsed.data.tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "Cannot create users in another tenant" });
       return;
@@ -163,7 +163,7 @@ router.get("/:userId", requireAuth, async (req, res) => {
   res.json(user);
 });
 
-router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
+router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "visor_cliente"), async (req, res) => {
   const userId = Number(req.params["userId"]);
   const authUser = (req as any).user;
   const parsed = updateUserSchema.safeParse(req.body);
@@ -179,12 +179,12 @@ router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente",
     return;
   }
 
-  if (authUser.role === "admin_cliente" && user.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "visor_cliente") && user.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }
 
-  if (authUser.role === "admin_cliente") {
+  if (authUser.role === "admin_cliente" || authUser.role === "visor_cliente") {
     if (parsed.data.tenantId !== undefined && parsed.data.tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "Cannot move users to another tenant" });
       return;

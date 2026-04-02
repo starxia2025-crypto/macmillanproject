@@ -192,7 +192,10 @@ export default function Users() {
         await refetch();
       },
       onError: (error) => {
-        const message = error instanceof Error ? error.message : "No se pudo crear el usuario.";
+        const rawMessage = error instanceof Error ? error.message : "No se pudo crear el usuario.";
+        const message = rawMessage.includes("Ya existe un usuario con ese correo")
+          ? "Ya existe un usuario con ese correo. Usa otro email o reactiva el acceso existente."
+          : rawMessage;
 
         toast({
           title: "No se pudo crear el usuario",
@@ -231,6 +234,18 @@ export default function Users() {
   });
 
   function onCreateSubmit(values: CreateUserValues) {
+    const normalizedEmail = values.email.trim().toLowerCase();
+    const emailExists = sortedUsers.some((user) => user.email.trim().toLowerCase() === normalizedEmail);
+
+    if (emailExists) {
+      toast({
+        title: "Correo ya registrado",
+        description: "Ya existe un usuario con ese correo. Usa otro email o reactiva el acceso existente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const tenantId =
       currentUser?.role === "superadmin"
         ? values.role === "superadmin" || values.role === "tecnico"
@@ -241,7 +256,7 @@ export default function Users() {
     createUser.mutate({
       data: {
         name: values.name,
-        email: values.email,
+        email: normalizedEmail,
         role: values.role as never,
         tenantId,
         password: values.password,

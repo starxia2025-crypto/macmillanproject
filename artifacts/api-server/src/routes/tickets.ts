@@ -150,7 +150,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 
   // Ensure tenant isolation
-  if (authUser.role === "usuario_cliente" || authUser.role === "visor_cliente") {
+  if (authUser.role === "usuario_cliente" || authUser.role === "visor_cliente" || authUser.role === "admin_cliente") {
     if (parsed.data.tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "Cannot create ticket for another tenant" });
       return;
@@ -225,7 +225,7 @@ router.get("/:ticketId", requireAuth, async (req, res) => {
   }
 
   // Tenant isolation check
-  if (authUser.role === "usuario_cliente" || authUser.role === "visor_cliente") {
+  if (authUser.role === "usuario_cliente") {
     if (ticket.tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
@@ -234,7 +234,7 @@ router.get("/:ticketId", requireAuth, async (req, res) => {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
     }
-  } else if (authUser.role === "admin_cliente") {
+  } else if (authUser.role === "admin_cliente" || authUser.role === "visor_cliente") {
     if (ticket.tenantId !== authUser.tenantId) {
       res.status(403).json({ error: "Forbidden", message: "Access denied" });
       return;
@@ -270,7 +270,7 @@ router.get("/:ticketId", requireAuth, async (req, res) => {
   ]);
 
   // Filter internal comments for non-technicians
-  const visibleComments = (authUser.role === "usuario_cliente" || authUser.role === "visor_cliente")
+  const visibleComments = (authUser.role === "usuario_cliente")
     ? comments.filter((c) => !c.isInternal)
     : comments;
 
@@ -339,7 +339,7 @@ router.patch("/:ticketId", requireAuth, async (req, res) => {
   });
 });
 
-router.post("/:ticketId/assign", requireAuth, requireRole("superadmin", "tecnico", "admin_cliente"), async (req, res) => {
+router.post("/:ticketId/assign", requireAuth, requireRole("superadmin", "tecnico", "admin_cliente", "visor_cliente"), async (req, res) => {
   const ticketId = Number(req.params["ticketId"]);
   const authUser = (req as any).user;
   const parsed = assignTicketSchema.safeParse(req.body);
@@ -485,7 +485,7 @@ router.get("/:ticketId/comments", requireAuth, async (req, res) => {
     .where(eq(commentsTable.ticketId, ticketId))
     .orderBy(commentsTable.createdAt);
 
-  const filtered = (authUser.role === "usuario_cliente" || authUser.role === "visor_cliente")
+  const filtered = (authUser.role === "usuario_cliente")
     ? comments.filter((c) => !c.isInternal)
     : comments;
 
@@ -513,7 +513,7 @@ router.post("/:ticketId/comments", requireAuth, async (req, res) => {
   }
 
   // Only technicians can post internal comments
-  const isInternal = parsed.data.isInternal && ["superadmin", "tecnico", "admin_cliente"].includes(authUser.role);
+  const isInternal = parsed.data.isInternal && ["superadmin", "tecnico", "admin_cliente", "visor_cliente"].includes(authUser.role);
 
   const comment = await db.insert(commentsTable).values({
     ticketId,
