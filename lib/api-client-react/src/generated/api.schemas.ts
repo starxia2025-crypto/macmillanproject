@@ -22,6 +22,8 @@ export interface LoginRequest {
   email: string;
   /** @minLength 6 */
   password: string;
+  captchaToken?: string;
+  captchaAnswer?: string;
 }
 
 export interface UserProfile {
@@ -39,6 +41,7 @@ export interface UserProfile {
   tenantHasOrderLookup?: boolean;
   tenantHasReturnsAccess?: boolean;
   active: boolean;
+  mustChangePassword?: boolean;
   createdAt: string;
 }
 
@@ -56,6 +59,7 @@ export interface User {
   tenantHasOrderLookup?: boolean;
   tenantHasReturnsAccess?: boolean;
   active: boolean;
+  mustChangePassword?: boolean;
   createdAt: string;
   lastLoginAt?: string | null;
 }
@@ -79,7 +83,7 @@ export interface CreateUserRequest {
   tenantId?: number | null;
   schoolId?: number | null;
   scopeType?: "global" | "tenant" | "school";
-  /** @minLength 8 */
+  /** @minLength 12 */
   password: string;
 }
 

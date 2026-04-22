@@ -15,6 +15,13 @@ const router = Router();
 const storageRoot = path.resolve(process.env["DOCUMENTS_STORAGE_ROOT"] || "/app/storage");
 const documentsStoragePath = path.join(storageRoot, "documents");
 
+type UploadedFile = {
+  arrayBuffer: () => Promise<ArrayBuffer>;
+  name: string;
+  size: number;
+  type: string;
+};
+
 const documentTypes = ["manual", "tutorial", "video", "faq", "link", "other"] as const;
 
 const createDocumentSchema = z.object({
@@ -42,6 +49,10 @@ const updateDocumentSchema = z.object({
   published: z.boolean().optional(),
 });
 
+function isUploadedFile(value: unknown): value is UploadedFile {
+  return !!value && typeof value !== "string" && typeof (value as UploadedFile).arrayBuffer === "function" && typeof (value as UploadedFile).name === "string";
+}
+
 function parseRoles(value: unknown) {
   return parseDbJson<string[]>(value, []);
 }
@@ -65,7 +76,7 @@ router.post("/upload", requireAuth, requireRole("superadmin", "admin_cliente", "
     const request = new Request("http://local/upload", {
       method: req.method,
       headers: req.headers as Record<string, string>,
-      body: Readable.toWeb(req) as BodyInit,
+      body: Readable.toWeb(req) as any,
       duplex: "half",
     });
 
@@ -74,7 +85,7 @@ router.post("/upload", requireAuth, requireRole("superadmin", "admin_cliente", "
     const rawTenantId = formData.get("tenantId");
     const tenantId = rawTenantId ? Number(rawTenantId) : authUser.tenantId;
 
-    if (!(file instanceof File)) {
+    if (!isUploadedFile(file)) {
       res.status(400).json({ error: "ValidationError", message: "No se recibio ningun archivo." });
       return;
     }
@@ -174,8 +185,8 @@ router.get("/", requireAuth, async (req, res) => {
             .leftJoin(usersTable, eq(documentsTable.createdById, usersTable.id))
             .where(where)
             .orderBy(documentsTable.createdAt)
+            .limit(limit)
             .offset(offset)
-            .fetch(limit)
         : db
             .select({
               id: documentsTable.id,
@@ -195,12 +206,12 @@ router.get("/", requireAuth, async (req, res) => {
               createdAt: documentsTable.createdAt,
               updatedAt: documentsTable.updatedAt,
             })
-            .top(limit)
             .from(documentsTable)
             .leftJoin(tenantsTable, eq(documentsTable.tenantId, tenantsTable.id))
             .leftJoin(usersTable, eq(documentsTable.createdById, usersTable.id))
             .where(where)
             .orderBy(documentsTable.createdAt)
+            .limit(limit)
     ),
     db.select({ count: count() }).from(documentsTable).where(where),
   ]);
@@ -222,30 +233,37 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
     return;
   }
 
-  const doc = await db.insert(documentsTable).values({
-    ...parsed.data,
-    tags: stringifyDbJson(parsed.data.tags),
-    visibleToRoles: stringifyDbJson(parsed.data.visibleToRoles),
-    createdById: authUser.userId,
-  }).returning();
+  try {
+    const now = new Date();
+    const insertValues: Record<string, unknown> = {
+      title: parsed.data.title,
+      type: parsed.data.type,
+      tenantId: parsed.data.tenantId,
+      createdById: authUser.userId,
+      published: parsed.data.published,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-  await createAuditLog({
-    action: "create",
-    entityType: "document",
-    entityId: doc[0]!.id,
-    userId: authUser.userId,
-    tenantId: parsed.data.tenantId,
-    newValues: { title: parsed.data.title, type: parsed.data.type },
-  });
+    if (parsed.data.description !== undefined) insertValues["description"] = parsed.data.description;
+    if (parsed.data.category !== undefined) insertValues["category"] = parsed.data.category;
+    if (parsed.data.url !== undefined) insertValues["url"] = parsed.data.url;
+    if (parsed.data.content !== undefined) insertValues["content"] = parsed.data.content;
+    if (parsed.data.tags.length > 0) insertValues["tags"] = stringifyDbJson(parsed.data.tags);
+    if (parsed.data.visibleToRoles.length > 0) insertValues["visibleToRoles"] = stringifyDbJson(parsed.data.visibleToRoles);
 
-  const tenant = await db.select({ name: tenantsTable.name }).top(1).from(tenantsTable).where(eq(tenantsTable.id, parsed.data.tenantId));
-  const creator = await db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, authUser.userId));
+    await db.insert(documentsTable).values(insertValues as any);
 
-  res.status(201).json({
-    ...normalizeDocument(doc[0]),
-    tenantName: tenant[0]?.name ?? "",
-    createdByName: creator[0]?.name ?? "",
-  });
+    res.status(201).json({
+      title: parsed.data.title,
+      type: parsed.data.type,
+      tenantId: parsed.data.tenantId,
+      published: parsed.data.published,
+    });
+  } catch (error) {
+    console.error("Create document failed", error);
+    res.status(500).json({ error: "InternalServerError", message: "No se pudo publicar el contenido." });
+  }
 });
 
 router.get("/:documentId", requireAuth, async (req, res) => {
@@ -271,11 +289,11 @@ router.get("/:documentId", requireAuth, async (req, res) => {
       createdAt: documentsTable.createdAt,
       updatedAt: documentsTable.updatedAt,
     })
-    .top(1)
     .from(documentsTable)
     .leftJoin(tenantsTable, eq(documentsTable.tenantId, tenantsTable.id))
     .leftJoin(usersTable, eq(documentsTable.createdById, usersTable.id))
-    .where(eq(documentsTable.id, documentId));
+    .where(eq(documentsTable.id, documentId))
+    .limit(1);
 
   const doc = docs[0];
   if (!doc) {
@@ -300,7 +318,7 @@ router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_clien
     return;
   }
 
-  const docs = await db.select().top(1).from(documentsTable).where(eq(documentsTable.id, documentId));
+  const docs = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId)).limit(1);
   const doc = docs[0];
   if (!doc) {
     res.status(404).json({ error: "NotFound", message: "Document not found" });
@@ -316,34 +334,57 @@ router.patch("/:documentId", requireAuth, requireRole("superadmin", "admin_clien
   if (parsed.data.tags !== undefined) updateValues["tags"] = stringifyDbJson(parsed.data.tags);
   if (parsed.data.visibleToRoles !== undefined) updateValues["visibleToRoles"] = stringifyDbJson(parsed.data.visibleToRoles);
 
-  const updated = await db
+  await db
     .update(documentsTable)
     .set(updateValues as any)
+    .where(eq(documentsTable.id, documentId));
+
+  const updatedDocs = await db
+    .select({
+      id: documentsTable.id,
+      title: documentsTable.title,
+      description: documentsTable.description,
+      type: documentsTable.type,
+      category: documentsTable.category,
+      url: documentsTable.url,
+      content: documentsTable.content,
+      tenantId: documentsTable.tenantId,
+      tenantName: tenantsTable.name,
+      tags: documentsTable.tags,
+      visibleToRoles: documentsTable.visibleToRoles,
+      published: documentsTable.published,
+      createdById: documentsTable.createdById,
+      createdByName: usersTable.name,
+      createdAt: documentsTable.createdAt,
+      updatedAt: documentsTable.updatedAt,
+    })
+    .from(documentsTable)
+    .leftJoin(tenantsTable, eq(documentsTable.tenantId, tenantsTable.id))
+    .leftJoin(usersTable, eq(documentsTable.createdById, usersTable.id))
     .where(eq(documentsTable.id, documentId))
-    .returning();
+    .limit(1);
 
-  const tenant = await db.select({ name: tenantsTable.name }).top(1).from(tenantsTable).where(eq(tenantsTable.id, doc.tenantId));
-  const creator = await db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, doc.createdById));
+  const updatedDoc = updatedDocs[0];
+  if (!updatedDoc) {
+    res.status(404).json({ error: "NotFound", message: "Document not found" });
+    return;
+  }
 
-  res.json({
-    ...normalizeDocument(updated[0]),
-    tenantName: tenant[0]?.name ?? "",
-    createdByName: creator[0]?.name ?? "",
-  });
+  res.json(normalizeDocument(updatedDoc));
 });
 
-router.delete("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "visor_cliente"), async (req, res) => {
+router.delete("/:documentId", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico", "manager", "visor_cliente"), async (req, res) => {
   const documentId = Number(req.params["documentId"]);
   const authUser = (req as any).user;
 
-  const docs = await db.select().top(1).from(documentsTable).where(eq(documentsTable.id, documentId));
+  const docs = await db.select().from(documentsTable).where(eq(documentsTable.id, documentId)).limit(1);
   const doc = docs[0];
   if (!doc) {
     res.status(404).json({ error: "NotFound", message: "Document not found" });
     return;
   }
 
-  if ((authUser.role === "admin_cliente" || authUser.role === "visor_cliente") && doc.tenantId !== authUser.tenantId) {
+  if ((authUser.role === "admin_cliente" || authUser.role === "manager" || authUser.role === "visor_cliente") && doc.tenantId !== authUser.tenantId) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }

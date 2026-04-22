@@ -10,8 +10,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@azure/core-auth": "^1.10.1",
-    "@azure/identity": "^4.13.1",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "bcryptjs": "^3.0.3",
@@ -22,7 +20,7 @@
     "express": "^5",
     "express-rate-limit": "^8.3.1",
     "express-session": "^1.19.0",
-    "mssql": "^11.0.1",
+    "nodemailer": "^6.10.1",
     "pino": "^9",
     "pino-http": "^10",
     "zod": "catalog:"

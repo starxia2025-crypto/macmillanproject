@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Loader2,
@@ -61,13 +62,6 @@ const educationTicketSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["subjectType"],
       message: "Selecciona si la consulta es sobre un alumno, un docente o sobre tu cuenta",
-    });
-  }
-  if (!values.schoolId) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["schoolId"],
-      message: "Selecciona el colegio",
     });
   }
 });
@@ -116,6 +110,24 @@ function inferMochilaDescription(record: MochilaLookupResult["records"][number])
   return (record.token?.trim().length ?? 0) > 15 ? "Inglés" : "Francés/Alemán";
 }
 
+function getTokenLength(record: MochilaLookupResult["records"][number]) {
+  return record.token?.trim().length ?? 0;
+}
+
+function getMochilaOrderId(lookup: MochilaLookupResult | null) {
+  return lookup?.records.find((record) => record.idOrder !== null && record.idOrder !== undefined)?.idOrder?.trim() ?? "";
+}
+
+function normalizeSchoolLabel(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function getInitials(name: string | null, surname: string | null, fallbackEmail: string | null) {
   const fullName = [name, surname].filter(Boolean).join(" ").trim();
   if (fullName) {
@@ -128,6 +140,20 @@ function getInitials(name: string | null, surname: string | null, fallbackEmail:
 
   const fallback = fallbackEmail?.trim() || "";
   return fallback.slice(0, 2).toUpperCase() || "AL";
+}
+
+function getAlumnoInquiryTypeFromActions(selectedItems: Array<{ actions: StudentLineAction[] }>) {
+  const selectedIssueTypes = Array.from(
+    new Set(
+      selectedItems.flatMap((item) =>
+        item.actions.map((action) => (action === "return" ? "Devolucion" : "No ve el libro"))
+      )
+    )
+  );
+
+  if (selectedIssueTypes.length === 0) return "Otras";
+  if (selectedIssueTypes.length > 1) return "Varios";
+  return selectedIssueTypes[0]!;
 }
 
 function LanguageFlag({ kind }: { kind: "english" | "frde" }) {
@@ -169,6 +195,9 @@ export default function NewEducationTicket() {
   const [mochilaOrderId, setMochilaOrderId] = useState("");
   const [showTeacherRegistrationRequest, setShowTeacherRegistrationRequest] = useState(false);
   const [teacherRegistrationNotes, setTeacherRegistrationNotes] = useState("");
+  const [showChangeEmailDialog, setShowChangeEmailDialog] = useState(false);
+  const [requestedStudentEmail, setRequestedStudentEmail] = useState("");
+  const [requestedStudentEmailError, setRequestedStudentEmailError] = useState<string | null>(null);
   const [selectedLineActions, setSelectedLineActions] = useState<Record<string, StudentLineAction[]>>({});
 
   const { data: tenants } = useListTenants(
@@ -243,6 +272,17 @@ export default function NewEducationTicket() {
   const shouldShowMochilasLookup = hasSelectedSubjectType && subjectType === "Alumno" && (mochilasEnabled || orderLookupEnabled || useSessionSchool);
   const tenantSchools = (selectedTenant?.schools ?? []).filter((school) => school.active);
   const selectedSchool = tenantSchools.find((school) => school.id === selectedSchoolId);
+  const detectedMochilaSchool = tenantSchools.find((school) => {
+    const normalizedSchool = normalizeSchoolLabel(school.name);
+    return mochilaLookup?.schools.some((mochilaSchool) => {
+      const normalizedMochilaSchool = normalizeSchoolLabel(mochilaSchool);
+      return (
+        normalizedSchool === normalizedMochilaSchool ||
+        (normalizedSchool.length > 4 && normalizedMochilaSchool.includes(normalizedSchool)) ||
+        (normalizedMochilaSchool.length > 4 && normalizedSchool.includes(normalizedMochilaSchool))
+      );
+    });
+  });
   const shouldUseSimplifiedAlumnoFlow = subjectType === "Alumno" && shouldShowMochilasLookup && !!mochilaLookup;
   const shouldHideExtendedFields =
     !hasSelectedSubjectType ||
@@ -304,7 +344,7 @@ export default function NewEducationTicket() {
   const studentEnglishCredential = useMemo(() => {
     if (!mochilaLookup) return null;
 
-    const record = mochilaLookup.records.find((item) => (item.token?.trim().length ?? 0) > 15);
+    const record = mochilaLookup.records.find((item) => getTokenLength(item) > 15);
     if (!record) return null;
 
     return {
@@ -315,7 +355,10 @@ export default function NewEducationTicket() {
   const studentBlinkCredential = useMemo(() => {
     if (!mochilaLookup) return null;
 
-    const record = mochilaLookup.records.find((item) => (item.token?.trim().length ?? 0) <= 15);
+    const record = mochilaLookup.records.find((item) => {
+      const tokenLength = getTokenLength(item);
+      return tokenLength > 0 && tokenLength <= 15;
+    });
     if (!record) return null;
 
     return {
@@ -358,10 +401,22 @@ export default function NewEducationTicket() {
     }
   }, [mochilasEnabled, orderLookupEnabled, subjectType, useSessionSchool]);
 
+  useEffect(() => {
+    if (!detectedMochilaSchool?.id || selectedSchoolId) return;
+    form.setValue("schoolId", detectedMochilaSchool.id, { shouldValidate: true });
+  }, [detectedMochilaSchool?.id, form, selectedSchoolId]);
+
   const createMutation = useCreateTicket({
     mutation: {
       onSuccess: (data) => {
         setLocation(`/tickets/${data.id}`);
+      },
+      onError: (error) => {
+        toast({
+          title: "No se pudo crear la consulta",
+          description: error instanceof Error ? error.message : "Revisa los datos e inténtalo de nuevo.",
+          variant: "destructive",
+        });
       },
     },
   });
@@ -546,11 +601,77 @@ export default function NewEducationTicket() {
     );
   }
 
+  function openChangeStudentEmailDialog() {
+    const normalizedStudentEmail = (mochilaLookup?.studentEmail || form.getValues("studentEmail")).trim().toLowerCase();
+    if (!normalizedStudentEmail) {
+      form.setError("studentEmail", {
+        type: "manual",
+        message: "Indica primero el correo del alumno",
+      });
+      return;
+    }
+
+    setRequestedStudentEmail("");
+    setRequestedStudentEmailError(null);
+    setShowChangeEmailDialog(true);
+  }
+
   function handleChangeStudentEmail() {
-    toast({
-      title: "Cambio de email pendiente",
-      description: "La funcionalidad para cambiar el email del alumno la configuraremos en el siguiente paso.",
+    const normalizedStudentEmail = (mochilaLookup?.studentEmail || form.getValues("studentEmail")).trim().toLowerCase();
+    const normalizedRequestedEmail = requestedStudentEmail.trim().toLowerCase();
+    const emailValidation = z.string().email("Indica un email valido").safeParse(normalizedRequestedEmail);
+
+    if (!emailValidation.success) {
+      setRequestedStudentEmailError("Indica un email valido");
+      return;
+    }
+
+    const ticketSchool = selectedSchool ?? detectedMochilaSchool;
+    const schoolName = ticketSchool?.name || mochilaLookup?.schools[0] || user?.schoolName || "Colegio";
+    const tenantId =
+      user?.scopeType === "global"
+        ? (selectedTenantId as number)
+        : (user?.tenantId as number);
+
+    const schoolId =
+      useSessionSchool
+        ? (user?.schoolId as number)
+        : ((ticketSchool?.id ?? selectedSchoolId) as number);
+
+    const actionTitle = "Modificar correo";
+
+    quickAccessIssueMutation.mutate({
+      data: {
+        title: actionTitle,
+        description: [
+          `Colegio: ${schoolName}`,
+          `Email actual: ${normalizedStudentEmail}`,
+          `Email solicitado: ${normalizedRequestedEmail}`,
+          `Informador: ${user?.email ?? "-"}`,
+          "Accion solicitada: Modificar el correo del alumno.",
+        ].join("\n"),
+        priority: TicketPriority.media,
+        category: "modificar_correo",
+        customFields: {
+          school: schoolName,
+          studentEmail: normalizedStudentEmail,
+          affectedEmail: normalizedStudentEmail,
+          currentStudentEmail: normalizedStudentEmail,
+          newStudentEmail: normalizedRequestedEmail,
+          reporterEmail: user?.email ?? null,
+          subjectType: "Alumno",
+          inquiryType: actionTitle,
+          mochilaLookup,
+          changeEmailRequested: true,
+        },
+        tenantId,
+        schoolId,
+      },
     });
+
+    setShowChangeEmailDialog(false);
+    setRequestedStudentEmail("");
+    setRequestedStudentEmailError(null);
   }
 
   function createTeacherRegistrationTicket() {
@@ -587,16 +708,16 @@ export default function NewEducationTicket() {
         ].filter(Boolean).join("\n"),
         priority: TicketPriority.media,
         category: "alta_docente",
-        customFields: {
-          school: schoolName,
-          teacherEmail,
-          affectedEmail: teacherEmail,
-          reporterEmail: user?.email ?? null,
-          subjectType: "Docente",
-          inquiryType: "Solicitud de alta",
-          teacherRegistrationRequested: true,
-          teacherRegistrationNotes: teacherRegistrationNotes.trim() || null,
-        },
+          customFields: {
+            school: schoolName,
+            teacherEmail,
+            affectedEmail: teacherEmail,
+            reporterEmail: user?.email ?? null,
+            subjectType: "Docente",
+            inquiryType: "Alta docente",
+            teacherRegistrationRequested: true,
+            teacherRegistrationNotes: teacherRegistrationNotes.trim() || null,
+          },
         tenantId,
         schoolId,
       },
@@ -637,12 +758,10 @@ export default function NewEducationTicket() {
         ? (user?.schoolId as number)
         : (selectedSchoolId as number);
 
-    quickAccessIssueMutation.mutate({
-      data: {
-        title:
-          kind === "registration"
-            ? `${schoolName} - Solicitud de alta docente`
-            : `${schoolName} - El docente no puede acceder`,
+      quickAccessIssueMutation.mutate({
+        data: {
+          title:
+            kind === "registration" ? "Alta docente" : "No puede acceder",
         description: [
           `Colegio: ${schoolName}`,
           `Docente: ${teacherEmail}`,
@@ -655,16 +774,16 @@ export default function NewEducationTicket() {
         ].join("\n"),
         priority: values.priority ?? TicketPriority.media,
         category: kind === "registration" ? "alta_docente" : "acceso_docente",
-        customFields: {
-          school: schoolName,
-          teacherEmail,
-          affectedEmail: teacherEmail,
-          reporterEmail: user?.email ?? null,
-          subjectType: "Docente",
-          inquiryType: kind === "registration" ? "Solicitud de alta" : "No puede acceder",
-          teacherRegistrationRequested: kind === "registration",
-          teacherRegistrationNotes: kind === "registration" ? teacherDescription : null,
-          description: teacherDescription,
+          customFields: {
+            school: schoolName,
+            teacherEmail,
+            affectedEmail: teacherEmail,
+            reporterEmail: user?.email ?? null,
+            subjectType: "Docente",
+            inquiryType: kind === "registration" ? "Alta docente" : "No puede acceder",
+            teacherRegistrationRequested: kind === "registration",
+            teacherRegistrationNotes: kind === "registration" ? teacherDescription : null,
+            description: teacherDescription,
         },
         tenantId,
         schoolId,
@@ -682,7 +801,8 @@ export default function NewEducationTicket() {
       return;
     }
 
-    const schoolName = selectedSchool?.name || user?.schoolName || "Colegio";
+    const ticketSchool = selectedSchool ?? detectedMochilaSchool;
+    const schoolName = ticketSchool?.name || mochilaLookup?.schools[0] || user?.schoolName || "Colegio";
     const tenantId =
       user?.scopeType === "global"
         ? (selectedTenantId as number)
@@ -691,11 +811,14 @@ export default function NewEducationTicket() {
     const schoolId =
       useSessionSchool
         ? (user?.schoolId as number)
-        : (selectedSchoolId as number);
+        : ((ticketSchool?.id ?? selectedSchoolId) as number);
 
-    quickAccessIssueMutation.mutate({
-      data: {
-        title: `${schoolName} - ${subjectType === "Docente" ? "El docente" : subjectType === "SobreMiCuenta" ? "El usuario" : "El alumno"} aun continua sin poder acceder`,
+    const actionTitle = "No puede acceder";
+    const orderId = getMochilaOrderId(mochilaLookup);
+
+      quickAccessIssueMutation.mutate({
+        data: {
+          title: actionTitle,
         description: [
           `Colegio: ${schoolName}`,
           `${subjectType}: ${normalizedStudentEmail}`,
@@ -707,13 +830,14 @@ export default function NewEducationTicket() {
         category: "seguimiento_acceso_mochilas",
         customFields: {
           school: schoolName,
+          orderId,
           studentEmail: subjectType === "Alumno" ? normalizedStudentEmail : null,
-          teacherEmail: subjectType === "Docente" ? normalizedStudentEmail : null,
+            teacherEmail: subjectType === "Docente" ? normalizedStudentEmail : null,
           affectedEmail: normalizedStudentEmail,
-          reporterEmail: user?.email ?? null,
-          subjectType,
-          inquiryType: "No puede acceder",
-          mochilaLookup,
+            reporterEmail: user?.email ?? null,
+            subjectType,
+            inquiryType: actionTitle,
+            mochilaLookup,
           accessFollowUpRequested: true,
         },
         tenantId,
@@ -844,19 +968,17 @@ export default function NewEducationTicket() {
       data.subjectType === "SobreMiCuenta"
         ? (user?.email ?? "").trim().toLowerCase()
         : data.studentEmail.trim().toLowerCase();
-    const selectedIssueLabels = selectedActionItems.flatMap((item) =>
-      item.actions.map((action) => (action === "return" ? "Devolución" : "No ve el libro"))
-    );
-    const primaryIssueLabel = selectedIssueLabels[0] || data.inquiryType || "Consulta sobre libros";
-    const title =
-      data.subjectType === "Docente"
-        ? `${schoolName} - El docente no puede acceder`
-        : data.subjectType === "SobreMiCuenta"
-        ? `${schoolName} - Consulta sobre mi cuenta`
-        : `${schoolName} - ${primaryIssueLabel}`;
-    const description = data.subjectType === "Docente"
-      ? [
-          `Colegio: ${schoolName}`,
+      const alumnoInquiryType = getAlumnoInquiryTypeFromActions(selectedActionItems);
+      const inquiryTypeValue =
+        data.subjectType === "Docente"
+          ? "Docente Otras"
+          : data.subjectType === "SobreMiCuenta"
+          ? "Sobre su propia cuenta"
+          : alumnoInquiryType;
+      const title = inquiryTypeValue;
+      const description = data.subjectType === "Docente"
+        ? [
+            `Colegio: ${schoolName}`,
           `Docente: ${normalizedAffectedEmail}`,
           reporterEmail ? `Informador: ${reporterEmail}` : null,
           "Consulta sobre: Docente",
@@ -875,16 +997,16 @@ export default function NewEducationTicket() {
       : shouldUseSimplifiedAlumnoFlow
       ? [
           `Colegio: ${schoolName}`,
-          `Alumno: ${normalizedAffectedEmail}`,
-          reporterEmail ? `Informador: ${reporterEmail}` : null,
-          "Consulta sobre: Alumno",
-          selectedActionItems.length > 0
-            ? `Acciones seleccionadas: ${selectedActionItems
-                .map((item) => `${item.description} (${item.actions.map((action) => (action === "return" ? "Devolución" : "No ve el libro")).join(", ")})`)
-                .join(" | ")}`
-            : `Motivo principal: ${primaryIssueLabel}`,
-          data.observations?.trim() ? `Observaciones: ${data.observations.trim()}` : null,
-        ].filter(Boolean).join("\n")
+            `Alumno: ${normalizedAffectedEmail}`,
+            reporterEmail ? `Informador: ${reporterEmail}` : null,
+            "Consulta sobre: Alumno",
+            selectedActionItems.length > 0
+              ? `Acciones seleccionadas: ${selectedActionItems
+                  .map((item) => `${item.description} (${item.actions.map((action) => (action === "return" ? "Devolucion" : "No ve el libro")).join(", ")})`)
+                  .join(" | ")}`
+              : `Motivo principal: ${alumnoInquiryType}`,
+            data.observations?.trim() ? `Observaciones: ${data.observations.trim()}` : null,
+          ].filter(Boolean).join("\n")
       : [
           `Colegio: ${schoolName}`,
           `${data.subjectType}: ${normalizedAffectedEmail}`,
@@ -920,15 +1042,10 @@ export default function NewEducationTicket() {
           studentEnrollment: data.studentEnrollment || null,
           stage: data.stage || null,
           course: data.course || null,
-          subject: data.subject || null,
-          inquiryType:
-            data.subjectType === "Docente"
-              ? "No puede acceder"
-              : data.subjectType === "SobreMiCuenta"
-              ? "Sobre mi cuenta"
-              : data.inquiryType,
-          observations: data.observations || null,
-          mochilaLookup,
+            subject: data.subject || null,
+            inquiryType: inquiryTypeValue,
+            observations: data.observations || null,
+            mochilaLookup,
           lineActions: subjectType === "Alumno" && selectedActionItems.length > 0 ? selectedActionItems : null,
           returnItems: subjectType === "Alumno" && selectedReturnItems.length > 0 ? selectedReturnItems : null,
           returnRequested: subjectType === "Alumno" && selectedReturnItems.length > 0,
@@ -1438,7 +1555,7 @@ export default function NewEducationTicket() {
                                 <p className="text-sm text-slate-500">Datos de acceso detectados</p>
                               </div>
                             </div>
-                            <Button type="button" size="sm" variant="outline" className="rounded-2xl border-slate-300 bg-white" onClick={handleChangeStudentEmail}>
+                            <Button type="button" size="sm" variant="outline" className="rounded-2xl border-slate-300 bg-white" onClick={openChangeStudentEmailDialog}>
                               <Mail className="mr-2 h-4 w-4" />
                               Cambiar email
                             </Button>
@@ -1492,45 +1609,49 @@ export default function NewEducationTicket() {
                             </div>
 
                             <div className="mt-4 space-y-3">
-                              <div className="rounded-2xl border border-amber-200 bg-white px-4 py-4 shadow-sm">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="flex items-start gap-3">
-                                    <LanguageFlag kind="english" />
-                                    <div>
-                                      <p className="text-sm font-semibold text-slate-900">Inglés</p>
-                                      <p className="mt-1 text-sm text-slate-600">{studentEnglishCredential?.password || "-"}</p>
+                              {studentEnglishCredential && (
+                                <div className="rounded-2xl border border-amber-200 bg-white px-4 py-4 shadow-sm">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex items-start gap-3">
+                                      <LanguageFlag kind="english" />
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-900">Inglés</p>
+                                        <p className="mt-1 text-sm text-slate-600">{studentEnglishCredential.password || "-"}</p>
+                                      </div>
                                     </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
+                                      onClick={handleForgotStudentEnglishPassword}
+                                    >
+                                      Cambiar contraseña
+                                    </Button>
                                   </div>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
-                                    onClick={handleForgotStudentEnglishPassword}
-                                  >
-                                    Cambiar contraseña
-                                  </Button>
                                 </div>
-                              </div>
+                              )}
 
-                              <div className="rounded-2xl border border-amber-200 bg-white px-4 py-4 shadow-sm">
-                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                  <div className="flex items-start gap-3">
-                                    <LanguageFlag kind="frde" />
-                                    <div>
-                                      <p className="text-sm font-semibold text-slate-900">Francés/alemán</p>
-                                      <p className="mt-1 text-sm text-slate-600">{studentBlinkCredential?.password || "-"}</p>
+                              {studentBlinkCredential && (
+                                <div className="rounded-2xl border border-amber-200 bg-white px-4 py-4 shadow-sm">
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex items-start gap-3">
+                                      <LanguageFlag kind="frde" />
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-900">Francés/alemán</p>
+                                        <p className="mt-1 text-sm text-slate-600">{studentBlinkCredential.password || "-"}</p>
+                                      </div>
                                     </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
+                                      onClick={handleForgotStudentBlinkPassword}
+                                    >
+                                      Cambiar contraseña
+                                    </Button>
                                   </div>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
-                                    onClick={handleForgotStudentBlinkPassword}
-                                  >
-                                    Cambiar contraseña
-                                  </Button>
                                 </div>
-                              </div>
+                              )}
 
                             </div>
                           </div>
@@ -1954,6 +2075,47 @@ export default function NewEducationTicket() {
           </Card>
         </form>
       </Form>
+
+      <Dialog open={showChangeEmailDialog} onOpenChange={setShowChangeEmailDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiar email del alumno</DialogTitle>
+            <DialogDescription>Revisa el correo actual y escribe el email correcto para enviar la solicitud.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-slate-700">Email actual en BBDD</p>
+              <div className="rounded-lg border bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                {(mochilaLookup?.studentEmail || form.getValues("studentEmail")).trim().toLowerCase() || "-"}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700" htmlFor="requested-student-email">
+                Email correcto
+              </label>
+              <Input
+                id="requested-student-email"
+                type="email"
+                placeholder="alumno@centro.es"
+                value={requestedStudentEmail}
+                onChange={(event) => {
+                  setRequestedStudentEmail(event.target.value);
+                  if (requestedStudentEmailError) setRequestedStudentEmailError(null);
+                }}
+              />
+              {requestedStudentEmailError && <p className="text-sm text-rose-600">{requestedStudentEmailError}</p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setShowChangeEmailDialog(false)}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={handleChangeStudentEmail}>
+              Enviar solicitud
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

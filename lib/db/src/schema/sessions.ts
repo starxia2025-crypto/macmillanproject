@@ -1,12 +1,12 @@
-import { int, nvarchar, datetime2 } from "drizzle-orm/mssql-core";
+import { int, varchar, timestamp } from "drizzle-orm/mysql-core";
 import { usersTable } from "./users";
-import { createdAtColumn, dboSchema, idColumn } from "./_shared";
+import { createdAtColumn, helpdeskTable, idColumn } from "./_shared";
 
-export const sessionsTable = dboSchema.table("SOP_sessions", {
+export const sessionsTable = helpdeskTable("SOP_sessions", {
   id: idColumn(),
-  sessionToken: nvarchar("session_token", { length: 255 }).notNull().unique(),
+  sessionToken: varchar("session_token", { length: 255 }).notNull().unique(),
   userId: int("user_id").notNull().references(() => usersTable.id),
-  expiresAt: datetime2("expires_at", { mode: "date" }).notNull(),
+  expiresAt: timestamp("expires_at", { mode: "date", fsp: 3 }).notNull(),
   createdAt: createdAtColumn(),
 });
 

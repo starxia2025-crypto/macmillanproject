@@ -7,6 +7,7 @@ import ticketsRouter from "./tickets";
 import documentsRouter from "./documents";
 import dashboardRouter from "./dashboard";
 import auditRouter from "./audit";
+import systemAlertRouter from "./system-alert";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use("/tickets", ticketsRouter);
 router.use("/documents", documentsRouter);
 router.use("/dashboard", dashboardRouter);
 router.use("/audit", auditRouter);
+router.use("/system-alert", systemAlertRouter);
 
 export default router;

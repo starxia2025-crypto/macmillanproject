@@ -20,7 +20,7 @@ export async function createAuditLog(params: {
       tenantId: params.tenantId ?? null,
       oldValues: stringifyDbJson(params.oldValues ?? null),
       newValues: stringifyDbJson(params.newValues ?? null),
-    });
+    } as any);
   } catch (err) {
     // Audit log failure should not block the main operation
     console.error("Failed to write audit log", err);

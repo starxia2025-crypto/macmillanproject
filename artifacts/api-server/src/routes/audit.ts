@@ -61,8 +61,8 @@ router.get("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico
             .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
             .where(where)
             .orderBy(desc(auditLogsTable.createdAt))
+            .limit(limit)
             .offset(offset)
-            .fetch(limit)
         : db
             .select({
               id: auditLogsTable.id,
@@ -76,11 +76,11 @@ router.get("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico
               newValues: auditLogsTable.newValues,
               createdAt: auditLogsTable.createdAt,
             })
-            .top(limit)
             .from(auditLogsTable)
             .leftJoin(usersTable, eq(auditLogsTable.userId, usersTable.id))
             .where(where)
             .orderBy(desc(auditLogsTable.createdAt))
+            .limit(limit)
     ),
     db.select({ count: count() }).from(auditLogsTable).where(where),
   ]);

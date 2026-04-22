@@ -31,6 +31,7 @@ const createTenantSchema = z.object({
   primaryColor: z.string().nullable().optional(),
   sidebarBackgroundColor: z.string().nullable().optional(),
   sidebarTextColor: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
   hasMochilasAccess: z.boolean().optional(),
   hasOrderLookup: z.boolean().optional(),
   hasReturnsAccess: z.boolean().optional(),
@@ -131,9 +132,9 @@ async function syncTenantSchools(tenantId: number, schools: Array<z.infer<typeof
   }
 }
 
-function isSqlServerDuplicateError(error: any) {
-  const sqlServerNumber = error?.number ?? error?.originalError?.info?.number ?? error?.precedingErrors?.[0]?.number;
-  return error?.code === "23505" || error?.code === "2627" || error?.code === "2601" || sqlServerNumber === 2627 || sqlServerNumber === 2601;
+function isDuplicateEntryError(error: any) {
+  const driverNumber = error?.errno ?? error?.code ?? error?.cause?.errno;
+  return error?.code === "ER_DUP_ENTRY" || driverNumber === 1062 || driverNumber === "1062";
 }
 
 router.get("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), async (req, res) => {
@@ -152,8 +153,8 @@ router.get("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), as
   const [tenants, totalResult] = await Promise.all([
     (
       offset > 0
-        ? db.select().from(tenantsTable).where(whereClause).orderBy(tenantsTable.createdAt).offset(offset).fetch(limit)
-        : db.select().top(limit).from(tenantsTable).where(whereClause).orderBy(tenantsTable.createdAt)
+        ? db.select().from(tenantsTable).where(whereClause).orderBy(tenantsTable.createdAt).limit(limit).offset(offset)
+        : db.select().from(tenantsTable).where(whereClause).orderBy(tenantsTable.createdAt).limit(limit)
     ),
     db.select({ count: count() }).from(tenantsTable).where(whereClause),
   ]);
@@ -203,6 +204,7 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
     if (parsed.data.primaryColor !== undefined) insertValues["primaryColor"] = parsed.data.primaryColor ?? null;
     if (parsed.data.sidebarBackgroundColor !== undefined) insertValues["sidebarBackgroundColor"] = parsed.data.sidebarBackgroundColor ?? null;
     if (parsed.data.sidebarTextColor !== undefined) insertValues["sidebarTextColor"] = parsed.data.sidebarTextColor ?? null;
+    if (parsed.data.logoUrl !== undefined) insertValues["logoUrl"] = parsed.data.logoUrl ?? null;
     if (parsed.data.hasMochilasAccess !== undefined) insertValues["hasMochilasAccess"] = parsed.data.hasMochilasAccess;
     if (parsed.data.hasOrderLookup !== undefined) insertValues["hasOrderLookup"] = parsed.data.hasOrderLookup;
     if (parsed.data.hasReturnsAccess !== undefined) insertValues["hasReturnsAccess"] = parsed.data.hasReturnsAccess;
@@ -212,9 +214,9 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
 
     const tenant = await db
       .select()
-      .top(1)
       .from(tenantsTable)
-      .where(eq(tenantsTable.slug, parsed.data.slug));
+      .where(eq(tenantsTable.slug, parsed.data.slug))
+      .limit(1);
 
     const createdTenant = tenant[0];
     if (!createdTenant) {
@@ -244,7 +246,7 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
       openTickets: 0,
     });
   } catch (error: any) {
-    if (isSqlServerDuplicateError(error)) {
+    if (isDuplicateEntryError(error)) {
       res.status(409).json({ error: "Conflict", message: "Ya existe un colegio con ese identificador." });
       return;
     }
@@ -263,7 +265,7 @@ router.get("/:tenantId", requireAuth, requireRole("superadmin", "tecnico", "admi
     return;
   }
 
-  const tenants = await db.select().top(1).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  const tenants = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
   const tenant = tenants[0];
   if (!tenant) {
     res.status(404).json({ error: "NotFound", message: "Tenant not found" });
@@ -304,7 +306,7 @@ router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente
     return;
   }
 
-  const tenants = await db.select().top(1).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  const tenants = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
   const old = tenants[0];
   if (!old) {
     res.status(404).json({ error: "NotFound", message: "Tenant not found" });
@@ -326,7 +328,7 @@ router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente
     await syncTenantSchools(tenantId, parsed.data.schools);
   }
 
-  const updated = await db.select().top(1).from(tenantsTable).where(eq(tenantsTable.id, tenantId));
+  const updated = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
   const updatedTenant = updated[0];
   if (!updatedTenant) {
     res.status(404).json({ error: "NotFound", message: "Tenant not found after update" });

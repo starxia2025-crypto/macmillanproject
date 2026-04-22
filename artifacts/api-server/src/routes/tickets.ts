@@ -8,6 +8,7 @@ import { createAuditLog } from "../lib/audit.js";
 import { parseDbJson, stringifyDbJson } from "../lib/db-json.js";
 import { containsInsensitive } from "../lib/db-search.js";
 import { findMochilasStudentByEmail, findMochilasStudentByOrderId } from "../lib/mochilas.js";
+import { sendTicketResolvedEmail } from "../lib/ticket-resolution-email-graph.js";
 
 const router = Router();
 
@@ -52,6 +53,28 @@ const mochilaOrderLookupSchema = z.object({
   tenantId: z.coerce.number().optional(),
 });
 
+const bulkImportRowSchema = z.object({
+  red_educativa: z.string().trim().optional().default(""),
+  colegio: z.string().trim().min(1),
+  email_informador: z.string().trim().email(),
+  tipo_sujeto: z.enum(["alumno", "docente", "sobre_mi_cuenta"]),
+  email_afectado: z.string().trim().min(1),
+  prioridad: z.enum(ticketPriorities),
+  estado: z.enum(ticketStatuses),
+  tipo_consulta: z.string().trim().min(1),
+  descripcion: z.string().trim().min(3),
+  pedido: z.string().trim().optional().default(""),
+  matricula: z.string().trim().optional().default(""),
+  etapa: z.string().trim().optional().default(""),
+  curso: z.string().trim().optional().default(""),
+  asignatura: z.string().trim().optional().default(""),
+  observaciones: z.string().trim().optional().default(""),
+});
+
+const bulkImportPayloadSchema = z.object({
+  rows: z.array(bulkImportRowSchema).min(1),
+});
+
 function normalizeSchoolName(value: string | null | undefined) {
   return (value ?? "")
     .normalize("NFD")
@@ -59,6 +82,160 @@ function normalizeSchoolName(value: string | null | undefined) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function normalizeImportLookupValue(value: string | null | undefined) {
+  return normalizeSchoolName(value);
+}
+
+function fixMojibake(value: string) {
+  let next = value;
+
+  if (/[ÃÂâ]/.test(next)) {
+    try {
+      next = Buffer.from(next, "latin1").toString("utf8");
+    } catch {
+      next = value;
+    }
+  }
+
+  return next;
+}
+
+function cleanImportedText(value: string | null | undefined) {
+  const normalized = fixMojibake((value ?? "").trim());
+
+  const replacements: Array<[RegExp, string]> = [
+    [/activaci\?n/gi, "activación"],
+    [/informaci\?n/gi, "información"],
+    [/resoluci\?n/gi, "resolución"],
+    [/educaci\?n/gi, "educación"],
+    [/aplicaci\?n/gi, "aplicación"],
+    [/descripci\?n/gi, "descripción"],
+    [/asignaci\?n/gi, "asignación"],
+    [/gesti\?n/gi, "gestión"],
+    [/sesi\?n/gi, "sesión"],
+    [/versi\?n/gi, "versión"],
+    [/revisi\?n/gi, "revisión"],
+    [/categori\?a/gi, "categoría"],
+    [/matr[i?]cula/gi, "matrícula"],
+    [/contrase\?a/gi, "contraseña"],
+    [/espa\?ol/gi, "español"],
+    [/atenci\?n/gi, "atención"],
+    [/soluci\?n/gi, "solución"],
+    [/manana/gi, "mañana"],
+    [/Ã¡/g, "á"],
+    [/Ã©/g, "é"],
+    [/Ã­/g, "í"],
+    [/Ã³/g, "ó"],
+    [/Ãº/g, "ú"],
+    [/Ã±/g, "ñ"],
+    [/Âº/g, "º"],
+    [/Â·/g, "·"],
+  ];
+
+  return replacements.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), normalized);
+}
+
+function buildImportedTicketTitle(row: z.infer<typeof bulkImportRowSchema>) {
+  const school = cleanImportedText(row.colegio);
+  const inquiry = cleanImportedText(row.tipo_consulta);
+  return `${school} - ${inquiry}`;
+}
+
+async function resolveImportReporterId(email: string, fallbackUserId: number) {
+  const users = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(eq(usersTable.email, email.toLowerCase()))
+    .limit(1);
+
+  return users[0]?.id ?? fallbackUserId;
+}
+
+async function resolveImportTenantAndSchool(
+  rowSchool: string,
+  rowTenantName: string | null | undefined,
+  authUser: any,
+): Promise<{ tenantId: number; schoolId: number | null; schoolLabel: string }> {
+  const normalizedRowSchool = normalizeImportLookupValue(rowSchool);
+  const normalizedTenantName = normalizeImportLookupValue(rowTenantName);
+
+  if (!normalizedRowSchool) {
+    throw new Error("La columna colegio es obligatoria en cada fila.");
+  }
+
+  if (authUser.role !== "superadmin" && authUser.role !== "tecnico") {
+    if (!authUser.tenantId) {
+      throw new Error("No se pudo determinar la red educativa del usuario que importa.");
+    }
+
+    const schools = await db
+      .select({
+        id: schoolsTable.id,
+        name: schoolsTable.name,
+        active: schoolsTable.active,
+      })
+      .from(schoolsTable)
+      .where(eq(schoolsTable.tenantId, authUser.tenantId));
+
+    const matchedSchool = schools.find((school) => normalizeImportLookupValue(school.name) === normalizedRowSchool);
+    return {
+      tenantId: authUser.tenantId,
+      schoolId: matchedSchool?.id ?? null,
+      schoolLabel: cleanImportedText(matchedSchool?.name ?? rowSchool),
+    };
+  }
+
+  if (normalizedTenantName) {
+    const directTenants = await db
+      .select({ id: tenantsTable.id, name: tenantsTable.name })
+      .from(tenantsTable);
+    const matchedTenant = directTenants.find((tenant) => normalizeImportLookupValue(tenant.name) === normalizedTenantName);
+    if (!matchedTenant) {
+      throw new Error(`No se pudo relacionar la red educativa "${rowTenantName}" con el sistema.`);
+    }
+
+    const schools = await db
+      .select({
+        id: schoolsTable.id,
+        name: schoolsTable.name,
+        tenantId: schoolsTable.tenantId,
+        active: schoolsTable.active,
+      })
+      .from(schoolsTable)
+      .where(eq(schoolsTable.tenantId, matchedTenant.id));
+    const matchedSchool = schools.find((school) => normalizeImportLookupValue(school.name) === normalizedRowSchool);
+
+    return {
+      tenantId: matchedTenant.id,
+      schoolId: matchedSchool?.id ?? null,
+      schoolLabel: cleanImportedText(rowSchool),
+    };
+  }
+
+  const tenants = await db
+    .select({ id: tenantsTable.id, name: tenantsTable.name })
+    .from(tenantsTable);
+  const directTenant = tenants.find((tenant) => normalizeImportLookupValue(tenant.name) === normalizedRowSchool);
+  if (directTenant) {
+    return { tenantId: directTenant.id, schoolId: null, schoolLabel: directTenant.name };
+  }
+
+  const schools = await db
+    .select({
+      id: schoolsTable.id,
+      name: schoolsTable.name,
+      tenantId: schoolsTable.tenantId,
+      active: schoolsTable.active,
+    })
+    .from(schoolsTable);
+  const matchedSchool = schools.find((school) => normalizeImportLookupValue(school.name) === normalizedRowSchool);
+  if (matchedSchool) {
+    return { tenantId: matchedSchool.tenantId, schoolId: matchedSchool.id, schoolLabel: matchedSchool.name };
+  }
+
+  throw new Error(`No se pudo relacionar el colegio o red educativa "${rowSchool}" con el sistema.`);
 }
 
 function doesMochilaSchoolBelongToTenant(mochilaSchoolName: string | null | undefined, tenantSchoolNames: string[]) {
@@ -73,6 +250,59 @@ function doesMochilaSchoolBelongToTenant(mochilaSchoolName: string | null | unde
       normalizedMochila.includes(normalizedTenantSchool)
     );
   });
+}
+
+function collectSchoolNamesFromCustomFields(customFields: Record<string, unknown> | null | undefined) {
+  const candidates: string[] = [];
+
+  if (typeof customFields?.["school"] === "string") {
+    candidates.push(customFields["school"]);
+  }
+
+  const mochilaLookup = customFields?.["mochilaLookup"];
+  if (mochilaLookup && typeof mochilaLookup === "object") {
+    const lookup = mochilaLookup as Record<string, unknown>;
+    if (Array.isArray(lookup["schools"])) {
+      candidates.push(...lookup["schools"].filter((school): school is string => typeof school === "string"));
+    }
+
+    if (Array.isArray(lookup["records"])) {
+      for (const record of lookup["records"]) {
+        if (record && typeof record === "object") {
+          const schoolName = (record as Record<string, unknown>)["schoolName"];
+          if (typeof schoolName === "string") candidates.push(schoolName);
+        }
+      }
+    }
+  }
+
+  return [...new Set(candidates.map((school) => school.trim()).filter(Boolean))];
+}
+
+async function resolveTicketSchoolFromCustomFields(tenantId: number, customFields: Record<string, unknown> | null | undefined) {
+  const requestedSchoolNames = collectSchoolNamesFromCustomFields(customFields);
+  if (!requestedSchoolNames.length) return null;
+
+  const tenantSchools = await db
+    .select({ id: schoolsTable.id, name: schoolsTable.name })
+    .from(schoolsTable)
+    .where(and(eq(schoolsTable.tenantId, tenantId), eq(schoolsTable.active, true)));
+
+  for (const requestedSchoolName of requestedSchoolNames) {
+    const normalizedRequested = normalizeSchoolName(requestedSchoolName);
+    const matchedSchool = tenantSchools.find((school) => {
+      const normalizedSchool = normalizeSchoolName(school.name);
+      return (
+        normalizedSchool === normalizedRequested ||
+        (normalizedSchool.length > 4 && normalizedRequested.includes(normalizedSchool)) ||
+        (normalizedRequested.length > 4 && normalizedSchool.includes(normalizedRequested))
+      );
+    });
+
+    if (matchedSchool) return matchedSchool.id;
+  }
+
+  return null;
 }
 
 async function filterMochilasResultByTenantSchools(
@@ -159,13 +389,37 @@ function getTicketVisibilityConditions(authUser: any) {
   return conditions;
 }
 
-function canUserAccessTicket(ticket: { tenantId: number; schoolId?: number | null }, authUser: any) {
+function canUserAccessTicket(ticket: { tenantId: number; schoolId?: number | null; customFields?: unknown }, authUser: any) {
+  const customFields = parseCustomFields((ticket as any).customFields);
+  const isImportedBulkTicket = Boolean(customFields?.importedFromBulk);
   if (authUser.role === "superadmin" || authUser.role === "tecnico") {
     return true;
   }
 
   if (authUser.scopeType === "school") {
-    return !!authUser.schoolId && ticket.schoolId === authUser.schoolId;
+    if (["visor_cliente", "admin_cliente", "manager"].includes(authUser.role)) {
+      return !!authUser.tenantId && ticket.tenantId === authUser.tenantId;
+    }
+
+    if (isImportedBulkTicket && !!authUser.tenantId && ticket.tenantId === authUser.tenantId) {
+      return true;
+    }
+
+    if (authUser.schoolId && ticket.schoolId === authUser.schoolId) {
+      return true;
+    }
+
+    // Si el usuario tiene alcance de colegio pero no tiene schoolId
+    // (caso de historicos/importaciones antiguas), hacemos fallback a
+    // la red educativa completa, igual que ya hace el listado.
+    if (!authUser.schoolId) {
+      return !!authUser.tenantId && ticket.tenantId === authUser.tenantId;
+    }
+
+    // Permite abrir historicos importados a nivel de red educativa
+    // cuando el usuario pertenece a esa misma red pero el ticket no
+    // quedo asociado a un colegio concreto.
+    return !ticket.schoolId && !!authUser.tenantId && ticket.tenantId === authUser.tenantId;
   }
 
   if (authUser.scopeType === "tenant") {
@@ -198,6 +452,7 @@ function buildTicketConditions(query: Record<string, any>, authUser: any) {
   if (query["status"]) conditions.push(eq(ticketsTable.status, query["status"]));
   if (query["priority"]) conditions.push(eq(ticketsTable.priority, query["priority"]));
   if (query["assignedToId"]) conditions.push(eq(ticketsTable.assignedToId, Number(query["assignedToId"])));
+  if (query["createdById"]) conditions.push(eq(ticketsTable.createdById, Number(query["createdById"])));
   if (query["category"]) conditions.push(eq(ticketsTable.category, query["category"]));
   if (query["dateFrom"]) conditions.push(gte(ticketsTable.createdAt, new Date(query["dateFrom"])));
   if (query["dateTo"]) {
@@ -256,8 +511,8 @@ router.get("/", requireAuth, async (req, res) => {
             .leftJoin(usersTable, eq(ticketsTable.createdById, usersTable.id))
             .where(where)
             .orderBy(desc(ticketsTable.createdAt))
+            .limit(limit)
             .offset(offset)
-            .fetch(limit)
         : db
             .select({
               id: ticketsTable.id,
@@ -279,13 +534,13 @@ router.get("/", requireAuth, async (req, res) => {
               updatedAt: ticketsTable.updatedAt,
               resolvedAt: ticketsTable.resolvedAt,
             })
-            .top(limit)
             .from(ticketsTable)
             .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id))
             .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
             .leftJoin(usersTable, eq(ticketsTable.createdById, usersTable.id))
             .where(where)
             .orderBy(desc(ticketsTable.createdAt))
+            .limit(limit)
     ),
     db.select({ count: count() }).from(ticketsTable).where(where),
   ]);
@@ -295,7 +550,7 @@ router.get("/", requireAuth, async (req, res) => {
       const [commentCount, assignee] = await Promise.all([
         db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, t.id)),
         t.assignedToId
-          ? db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, t.assignedToId))
+          ? db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, t.assignedToId)).limit(1)
           : Promise.resolve([]),
       ]);
       return {
@@ -323,7 +578,7 @@ router.post("/", requireAuth, async (req, res) => {
       ? authUser.tenantId
       : parsed.data.tenantId;
 
-  const resolvedSchoolId =
+  let resolvedSchoolId =
     authUser.scopeType === "school"
       ? authUser.schoolId
       : (parsed.data.schoolId ?? null);
@@ -334,25 +589,35 @@ router.post("/", requireAuth, async (req, res) => {
   }
 
   if (!resolvedSchoolId) {
+    resolvedSchoolId = await resolveTicketSchoolFromCustomFields(resolvedTenantId, parsed.data.customFields ?? null);
+  }
+
+  const hasMochilasSchoolLabel =
+    ["seguimiento_acceso_mochilas", "modificar_correo", "consulta_educativa"].includes(parsed.data.category ?? "") &&
+    collectSchoolNamesFromCustomFields(parsed.data.customFields ?? null).length > 0;
+
+  if (!resolvedSchoolId && !hasMochilasSchoolLabel) {
     res.status(400).json({ error: "ValidationError", message: "Selecciona el colegio al que pertenece el ticket." });
     return;
   }
 
-  const schools = await db
-    .select({
-      id: schoolsTable.id,
-      tenantId: schoolsTable.tenantId,
-      name: schoolsTable.name,
-      active: schoolsTable.active,
-    })
-    .top(1)
-    .from(schoolsTable)
-    .where(eq(schoolsTable.id, resolvedSchoolId));
+  if (resolvedSchoolId) {
+    const schools = await db
+      .select({
+        id: schoolsTable.id,
+        tenantId: schoolsTable.tenantId,
+        name: schoolsTable.name,
+        active: schoolsTable.active,
+      })
+      .from(schoolsTable)
+      .where(eq(schoolsTable.id, resolvedSchoolId))
+      .limit(1);
 
-  const school = schools[0];
-  if (!school || !school.active || school.tenantId !== resolvedTenantId) {
-    res.status(400).json({ error: "ValidationError", message: "El colegio seleccionado no es valido para esta red educativa." });
-    return;
+    const school = schools[0];
+    if (!school || !school.active || school.tenantId !== resolvedTenantId) {
+      res.status(400).json({ error: "ValidationError", message: "El colegio seleccionado no es valido para esta red educativa." });
+      return;
+    }
   }
 
   if ((authUser.scopeType === "tenant" || authUser.scopeType === "school") && resolvedTenantId !== authUser.tenantId) {
@@ -372,7 +637,7 @@ router.post("/", requireAuth, async (req, res) => {
     schoolId: resolvedSchoolId,
     createdById: authUser.userId,
     customFields: stringifyDbJson(parsed.data.customFields ?? null),
-  });
+  } as any);
 
   const tickets = await db
     .select({
@@ -395,12 +660,12 @@ router.post("/", requireAuth, async (req, res) => {
       updatedAt: ticketsTable.updatedAt,
       resolvedAt: ticketsTable.resolvedAt,
     })
-    .top(1)
     .from(ticketsTable)
     .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id))
     .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
     .leftJoin(usersTable, eq(ticketsTable.createdById, usersTable.id))
-    .where(eq(ticketsTable.ticketNumber, ticketNumber));
+    .where(eq(ticketsTable.ticketNumber, ticketNumber))
+    .limit(1);
 
   const ticket = tickets[0];
   if (!ticket) {
@@ -448,9 +713,9 @@ router.get("/mochilas/student", requireAuth, async (req, res) => {
       hasMochilasAccess: tenantsTable.hasMochilasAccess,
       hasOrderLookup: tenantsTable.hasOrderLookup,
     })
-    .top(1)
     .from(tenantsTable)
-    .where(eq(tenantsTable.id, tenantId));
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
 
   const tenant = tenants[0];
   if (!tenant) {
@@ -485,7 +750,7 @@ router.get("/mochilas/student", requireAuth, async (req, res) => {
     const canSearchAcrossNetworks = ["visor_cliente", "tecnico", "superadmin"].includes(authUser.role);
     const filteredStudent = canSearchAcrossNetworks
       ? typedStudent
-      : await filterMochilasResultByTenantSchools(tenantId, typedStudent);
+      : typedStudent;
     if (!filteredStudent) {
       res.status(404).json({
         error: "OutsideTenant",
@@ -525,9 +790,9 @@ router.get("/mochilas/order", requireAuth, async (req, res) => {
       name: tenantsTable.name,
       hasOrderLookup: tenantsTable.hasOrderLookup,
     })
-    .top(1)
     .from(tenantsTable)
-    .where(eq(tenantsTable.id, tenantId));
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
 
   const tenant = tenants[0];
   if (!tenant) {
@@ -547,103 +812,186 @@ router.get("/mochilas/order", requireAuth, async (req, res) => {
       return;
     }
 
-    const canSearchAcrossNetworks = ["visor_cliente", "tecnico", "superadmin"].includes(authUser.role);
-    const filteredStudent = canSearchAcrossNetworks
-      ? student
-      : await filterMochilasResultByTenantSchools(tenantId, student);
-    if (!filteredStudent) {
-      res.status(404).json({
-        error: "OutsideTenant",
-        message: `El pedido no pertenece a ningun centro de la red educativa "${tenant.name}".`,
-      });
+    const typedStudent = filterMochilasResultByAllowedTypes(student, ["mochila", "mochila_blink"]);
+    if (!typedStudent) {
+      res.status(404).json({ error: "NotFound", message: "Pedido no encontrado. No es mochila, o no ha sido procesado aun." });
       return;
     }
 
-    res.json(filteredStudent);
+    res.json(typedStudent);
   } catch (error) {
     console.error("Mochilas order lookup failed", error);
     res.status(500).json({ error: "InternalServerError", message: "No se pudo consultar la informacion del pedido en Mochilas." });
   }
 });
 
+router.post("/import", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const parsed = bulkImportPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "ValidationError", message: "Revisa el formato del Excel antes de importarlo." });
+    return;
+  }
+
+  const warnings: string[] = [];
+  let createdCount = 0;
+
+  for (let index = 0; index < parsed.data.rows.length; index += 1) {
+    const row = parsed.data.rows[index]!;
+
+    try {
+      const resolvedScope = await resolveImportTenantAndSchool(row.colegio, row.red_educativa, authUser);
+      const createdById = await resolveImportReporterId(row.email_informador, authUser.userId);
+      const ticketNumber = generateTicketNumber();
+      const now = new Date();
+      const isResolved = row.estado === "resuelto" || row.estado === "cerrado";
+      const customFields = {
+        importedFromBulk: true,
+        importedTenantName: cleanImportedText(row.red_educativa) || null,
+        importedSchool: cleanImportedText(row.colegio),
+        studentEmail: cleanImportedText(row.email_afectado),
+        subjectType: row.tipo_sujeto,
+        inquiryType: cleanImportedText(row.tipo_consulta),
+        orderId: cleanImportedText(row.pedido) || null,
+        studentEnrollment: cleanImportedText(row.matricula) || null,
+        stage: cleanImportedText(row.etapa) || null,
+        course: cleanImportedText(row.curso) || null,
+        subject: cleanImportedText(row.asignatura) || null,
+        observations: cleanImportedText(row.observaciones) || null,
+        importReporterEmail: row.email_informador,
+      };
+
+      await db.insert(ticketsTable).values({
+        ticketNumber,
+        title: buildImportedTicketTitle(row),
+        description: cleanImportedText(row.descripcion),
+        status: row.estado,
+        priority: row.prioridad,
+        category: cleanImportedText(row.tipo_consulta),
+        tenantId: resolvedScope.tenantId,
+        schoolId: resolvedScope.schoolId,
+        createdById,
+        customFields: stringifyDbJson(customFields),
+        resolvedAt: isResolved ? now : null,
+      } as any);
+
+      const createdTickets = await db
+        .select({ id: ticketsTable.id })
+        .from(ticketsTable)
+        .where(eq(ticketsTable.ticketNumber, ticketNumber))
+        .limit(1);
+
+      const createdTicket = createdTickets[0];
+      if (createdTicket) {
+        await createAuditLog({
+          action: "bulk_import",
+          entityType: "ticket",
+          entityId: createdTicket.id,
+          userId: authUser.userId,
+          tenantId: resolvedScope.tenantId,
+          newValues: {
+            importedBy: authUser.userId,
+            reporterEmail: row.email_informador,
+            status: row.estado,
+            tenant: cleanImportedText(row.red_educativa) || null,
+            school: resolvedScope.schoolLabel,
+          },
+        });
+      }
+
+      if (createdById === authUser.userId && row.email_informador.toLowerCase() !== (authUser.email ?? "").toLowerCase()) {
+        warnings.push(`Fila ${index + 2}: no exist?a el usuario ${row.email_informador} y se us? la cuenta actual como creadora.`);
+      }
+
+      createdCount += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo importar esta fila.";
+      res.status(400).json({
+        error: "ImportError",
+        message: `La fila ${index + 2} no se pudo importar: ${message}`,
+        createdCount,
+        warnings,
+      });
+      return;
+    }
+  }
+
+  res.status(201).json({
+    createdCount,
+    warnings,
+  });
+});
+
 router.get("/:ticketId", requireAuth, async (req, res) => {
   const ticketId = Number(req.params["ticketId"]);
   const authUser = (req as any).user;
 
-  const tickets = await db
-    .select({
-      id: ticketsTable.id,
-      ticketNumber: ticketsTable.ticketNumber,
-      title: ticketsTable.title,
-      description: ticketsTable.description,
-      status: ticketsTable.status,
-      priority: ticketsTable.priority,
-      category: ticketsTable.category,
-      tenantId: ticketsTable.tenantId,
-      tenantName: tenantsTable.name,
-      schoolId: ticketsTable.schoolId,
-      schoolName: schoolsTable.name,
-      createdById: ticketsTable.createdById,
-      createdByName: usersTable.name,
-      assignedToId: ticketsTable.assignedToId,
-      customFields: ticketsTable.customFields,
-      createdAt: ticketsTable.createdAt,
-      updatedAt: ticketsTable.updatedAt,
-      resolvedAt: ticketsTable.resolvedAt,
-    })
-    .top(1)
-    .from(ticketsTable)
-    .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id))
-    .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
-    .leftJoin(usersTable, eq(ticketsTable.createdById, usersTable.id))
-    .where(eq(ticketsTable.id, ticketId))
-    ;
-
-  const ticket = tickets[0];
-  if (!ticket) {
-    res.status(404).json({ error: "NotFound", message: "Ticket not found" });
+  const baseTickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
+  const baseTicket = baseTickets[0];
+  if (!baseTicket) {
+    res.status(404).json({ error: "NotFound", message: "No se encontro la consulta solicitada." });
     return;
   }
 
-  if (!canUserAccessTicket(ticket, authUser)) {
-    res.status(403).json({ error: "Forbidden", message: "Access denied" });
+  if (!canUserAccessTicket(baseTicket, authUser)) {
+    res.status(403).json({ error: "Forbidden", message: "No tienes permisos para realizar esta accion." });
     return;
   }
 
-  const [comments, ticketAuditLogs, commentCount, assignee] = await Promise.all([
-    db
-      .select({
-        id: commentsTable.id,
-        ticketId: commentsTable.ticketId,
-        authorId: commentsTable.authorId,
-        authorName: usersTable.name,
-        authorRole: usersTable.role,
-        content: commentsTable.content,
-        isInternal: commentsTable.isInternal,
-        createdAt: commentsTable.createdAt,
-      })
-      .from(commentsTable)
-      .leftJoin(usersTable, eq(commentsTable.authorId, usersTable.id))
-      .where(eq(commentsTable.ticketId, ticketId))
-      .orderBy(commentsTable.createdAt),
-    db
-      .select()
-      .top(20)
-      .from(auditLogsTable)
-      .where(and(eq(auditLogsTable.entityType, "ticket"), eq(auditLogsTable.entityId, ticketId)))
-      .orderBy(desc(auditLogsTable.createdAt)),
-    db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)),
-    ticket.assignedToId
-      ? db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, ticket.assignedToId))
-      : Promise.resolve([]),
-  ]);
+  let tenant: Array<{ name: string }> = [];
+  let school: Array<{ name: string }> = [];
+  let creator: Array<{ name: string }> = [];
+  let assignee: Array<{ name: string }> = [];
+  let comments: any[] = [];
+  let ticketAuditLogs: any[] = [];
+  let commentCount: Array<{ count: number | string | bigint }> = [{ count: 0 }];
+
+  try {
+    [tenant, school, creator, assignee, comments, ticketAuditLogs, commentCount] = await Promise.all([
+      db.select({ name: tenantsTable.name }).from(tenantsTable).where(eq(tenantsTable.id, baseTicket.tenantId)).limit(1),
+      baseTicket.schoolId
+        ? db.select({ name: schoolsTable.name }).from(schoolsTable).where(eq(schoolsTable.id, baseTicket.schoolId)).limit(1)
+        : Promise.resolve([]),
+      db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, baseTicket.createdById)).limit(1),
+      baseTicket.assignedToId
+        ? db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, baseTicket.assignedToId)).limit(1)
+        : Promise.resolve([]),
+      db
+        .select({
+          id: commentsTable.id,
+          ticketId: commentsTable.ticketId,
+          authorId: commentsTable.authorId,
+          authorName: usersTable.name,
+          authorRole: usersTable.role,
+          content: commentsTable.content,
+          isInternal: commentsTable.isInternal,
+          createdAt: commentsTable.createdAt,
+        })
+        .from(commentsTable)
+        .leftJoin(usersTable, eq(commentsTable.authorId, usersTable.id))
+        .where(eq(commentsTable.ticketId, ticketId))
+        .orderBy(commentsTable.createdAt),
+      db
+        .select()
+        .from(auditLogsTable)
+        .where(and(eq(auditLogsTable.entityType, "ticket"), eq(auditLogsTable.entityId, ticketId)))
+        .orderBy(desc(auditLogsTable.createdAt))
+        .limit(20),
+      db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)),
+    ]);
+  } catch (error) {
+    console.error("Ticket detail secondary load failed", error);
+  }
 
   const visibleComments = authUser.scopeType === "school" || authUser.role === "usuario_cliente"
     ? comments.filter((c) => !c.isInternal)
     : comments;
 
   res.json({
-    ...normalizeTicket(ticket),
+    ...normalizeTicket(baseTicket),
+    tenantName: tenant[0]?.name ?? "",
+    schoolName: school[0]?.name ?? null,
+    createdByName: creator[0]?.name ?? "",
     assignedToName: (assignee as any)[0]?.name ?? null,
     commentCount: Number(commentCount[0]?.count ?? 0),
     comments: visibleComments,
@@ -664,7 +1012,7 @@ router.patch("/:ticketId", requireAuth, async (req, res) => {
     return;
   }
 
-  const tickets = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
   const ticket = tickets[0];
   if (!ticket) {
     res.status(404).json({ error: "NotFound", message: "Ticket not found" });
@@ -676,11 +1024,8 @@ router.patch("/:ticketId", requireAuth, async (req, res) => {
     return;
   }
 
-  if (
-    !["superadmin", "tecnico", "admin_cliente", "visor_cliente"].includes(authUser.role) &&
-    authUser.userId !== ticket.createdById
-  ) {
-    res.status(403).json({ error: "Forbidden", message: "You cannot change the status of this ticket" });
+  if (!canManageTicket(ticket, authUser) && authUser.role !== "visor_cliente") {
+    res.status(403).json({ error: "Forbidden", message: "You cannot update this ticket" });
     return;
   }
 
@@ -693,7 +1038,7 @@ router.patch("/:ticketId", requireAuth, async (req, res) => {
     .set(updateValues as any)
     .where(eq(ticketsTable.id, ticketId));
 
-  const updated = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const updated = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
 
   await createAuditLog({
     action: "update",
@@ -706,10 +1051,10 @@ router.patch("/:ticketId", requireAuth, async (req, res) => {
   });
 
   const [tenant, creator, assignee, commentCount] = await Promise.all([
-    db.select({ name: tenantsTable.name }).top(1).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)),
-    db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, ticket.createdById)),
+    db.select({ name: tenantsTable.name }).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)).limit(1),
+    db.select({ name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ticket.createdById)).limit(1),
     updated[0]!.assignedToId
-      ? db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, updated[0]!.assignedToId!))
+      ? db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, updated[0]!.assignedToId!)).limit(1)
       : Promise.resolve([]),
     db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)),
   ]);
@@ -732,7 +1077,7 @@ router.post("/:ticketId/assign", requireAuth, requireRole("superadmin", "tecnico
     return;
   }
 
-  const tickets = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
   const ticket = tickets[0];
   if (!ticket) {
     res.status(404).json({ error: "NotFound", message: "Ticket not found" });
@@ -749,7 +1094,7 @@ router.post("/:ticketId/assign", requireAuth, requireRole("superadmin", "tecnico
     .set({ assignedToId: parsed.data.userId, updatedAt: new Date() })
     .where(eq(ticketsTable.id, ticketId));
 
-  const updated = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const updated = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
 
   await createAuditLog({
     action: "assign",
@@ -762,10 +1107,10 @@ router.post("/:ticketId/assign", requireAuth, requireRole("superadmin", "tecnico
   });
 
   const [tenant, creator, assignee, commentCount] = await Promise.all([
-    db.select({ name: tenantsTable.name }).top(1).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)),
-    db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, ticket.createdById)),
+    db.select({ name: tenantsTable.name }).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)).limit(1),
+    db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, ticket.createdById)).limit(1),
     parsed.data.userId
-      ? db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, parsed.data.userId))
+      ? db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, parsed.data.userId)).limit(1)
       : Promise.resolve([]),
     db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)),
   ]);
@@ -788,7 +1133,7 @@ router.post("/:ticketId/status", requireAuth, async (req, res) => {
     return;
   }
 
-  const tickets = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
   const ticket = tickets[0];
   if (!ticket) {
     res.status(404).json({ error: "NotFound", message: "Ticket not found" });
@@ -814,7 +1159,7 @@ router.post("/:ticketId/status", requireAuth, async (req, res) => {
     .set(updateData as any)
     .where(eq(ticketsTable.id, ticketId));
 
-  const updated = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const updated = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
 
   if (parsed.data.comment) {
     await db.insert(commentsTable).values({
@@ -836,13 +1181,33 @@ router.post("/:ticketId/status", requireAuth, async (req, res) => {
   });
 
   const [tenant, creator, assignee, commentCount] = await Promise.all([
-    db.select({ name: tenantsTable.name }).top(1).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)),
-    db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, ticket.createdById)),
+    db.select({ name: tenantsTable.name }).from(tenantsTable).where(eq(tenantsTable.id, ticket.tenantId)).limit(1),
+    db.select({ name: usersTable.name, email: usersTable.email }).from(usersTable).where(eq(usersTable.id, ticket.createdById)).limit(1),
     updated[0]!.assignedToId
-      ? db.select({ name: usersTable.name }).top(1).from(usersTable).where(eq(usersTable.id, updated[0]!.assignedToId!))
+      ? db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, updated[0]!.assignedToId!)).limit(1)
       : Promise.resolve([]),
     db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)),
   ]);
+
+  if (ticket.status !== "resuelto" && parsed.data.status === "resuelto") {
+    const recipient = process.env["TICKET_RESOLVED_NOTIFY_TO"] || "javier.alexander@macmillaneducation.com";
+    sendTicketResolvedEmail({
+      recipient,
+      ticketNumber: updated[0]!.ticketNumber,
+      title: updated[0]!.title,
+      description: updated[0]!.description,
+      status: updated[0]!.status,
+      priority: updated[0]!.priority,
+      creatorName: creator[0]?.name ?? null,
+      creatorEmail: creator[0]?.email ?? null,
+      schoolName: null,
+      tenantName: tenant[0]?.name ?? null,
+      resolvedByName: assignee[0]?.name ?? authUser.name ?? null,
+      resolvedAt: (updateData["resolvedAt"] as Date | undefined) ?? new Date(),
+    }).catch((error) => {
+      console.error("Send ticket resolved email failed", error);
+    });
+  }
 
   res.json({
     ...normalizeTicket(updated[0]),
@@ -857,7 +1222,7 @@ router.get("/:ticketId/comments", requireAuth, async (req, res) => {
   const ticketId = Number(req.params["ticketId"]);
   const authUser = (req as any).user;
 
-  const tickets = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
+  const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
   const ticket = tickets[0];
   if (!ticket) {
     res.status(404).json({ error: "NotFound", message: "Ticket not found" });
@@ -904,13 +1269,14 @@ router.post("/:ticketId/comments", requireAuth, async (req, res) => {
     return;
   }
 
-  const tickets = await db.select().top(1).from(ticketsTable).where(eq(ticketsTable.id, ticketId));
-  if (!tickets[0]) {
+  const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
+  const ticket = tickets[0];
+  if (!ticket) {
     res.status(404).json({ error: "NotFound", message: "Ticket not found" });
     return;
   }
 
-  if (!canUserAccessTicket(tickets[0], authUser)) {
+  if (!canUserAccessTicket(ticket, authUser)) {
     res.status(403).json({ error: "Forbidden", message: "Access denied" });
     return;
   }
@@ -924,15 +1290,30 @@ router.post("/:ticketId/comments", requireAuth, async (req, res) => {
     isInternal,
   });
 
-  await db.update(ticketsTable).set({ updatedAt: new Date() }).where(eq(ticketsTable.id, ticketId));
-
   const [comment, author] = await Promise.all([
-    db.select().top(1).from(commentsTable).where(eq(commentsTable.ticketId, ticketId)).orderBy(desc(commentsTable.id)),
-    db.select({ name: usersTable.name, role: usersTable.role }).top(1).from(usersTable).where(eq(usersTable.id, authUser.userId)),
+    db.select().from(commentsTable).where(eq(commentsTable.ticketId, ticketId)).orderBy(desc(commentsTable.id)).limit(1),
+    db.select({ name: usersTable.name, role: usersTable.role }).from(usersTable).where(eq(usersTable.id, authUser.userId)).limit(1),
   ]);
 
+  const updateValues: Record<string, unknown> = { updatedAt: new Date() };
+  const createdComment = comment[0];
+  if (createdComment && !isInternal && authUser.userId !== ticket.createdById) {
+    updateValues["customFields"] = stringifyDbJson({
+      ...(parseCustomFields(ticket.customFields) ?? {}),
+      lastCreatorNotification: {
+        type: "comment",
+        commentId: createdComment.id,
+        authorId: authUser.userId,
+        authorName: author[0]?.name ?? "",
+        createdAt: createdComment.createdAt,
+      },
+    });
+  }
+
+  await db.update(ticketsTable).set(updateValues as any).where(eq(ticketsTable.id, ticketId));
+
   res.status(201).json({
-    ...comment[0],
+    ...createdComment,
     authorName: author[0]?.name ?? "",
     authorRole: author[0]?.role ?? "",
   });

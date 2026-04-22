@@ -7,6 +7,9 @@ import { useEffect } from "react";
 
 import { MacmillanLayout } from "@/components/layout-macmillan";
 import Login from "@/pages/login-macmillan";
+import ChangePassword from "@/pages/change-password";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Dashboard from "@/pages/dashboard";
 import Tickets from "@/pages/tickets";
 import TicketDetail from "@/pages/tickets/detail";
@@ -15,7 +18,7 @@ import Portal from "@/pages/portal-admin";
 import Clients from "@/pages/clients-admin";
 import Users from "@/pages/users";
 import Audit from "@/pages/audit";
-import Settings from "@/pages/settings";
+import Settings from "@/pages/settings-admin";
 import NotFound from "@/pages/not-found";
 import { getDefaultRouteForRole } from "@/lib/default-route";
 
@@ -44,6 +47,12 @@ function ProtectedRoute({ component: Component, roles }: { component: any; roles
     }
   }, [isLoading, user, roles, setLocation]);
 
+  useEffect(() => {
+    if (!isLoading && user?.mustChangePassword) {
+      setLocation("/change-password");
+    }
+  }, [isLoading, user, setLocation]);
+
   if (isLoading) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
@@ -53,6 +62,7 @@ function ProtectedRoute({ component: Component, roles }: { component: any; roles
   }
 
   if (!user) return null;
+  if (user.mustChangePassword) return null;
   if (roles && !roles.includes(user.role)) return null;
 
   return (
@@ -66,6 +76,9 @@ function Router() {
   const [location] = useLocation();
 
   if (location === "/") return <Login />;
+  if (location === "/forgot-password") return <ForgotPassword />;
+  if (location === "/reset-password") return <ResetPassword />;
+  if (location === "/change-password") return <PasswordChangeRoute />;
   if (location === "/dashboard") return <ProtectedRoute component={Dashboard} roles={["superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"]} />;
   if (location === "/tickets/new") return <ProtectedRoute component={NewTicket} roles={["superadmin", "admin_cliente", "tecnico", "usuario_cliente", "visor_cliente"]} />;
   if (location.startsWith("/tickets/") && location !== "/tickets") return <ProtectedRoute component={TicketDetail} roles={["superadmin", "admin_cliente", "tecnico", "usuario_cliente", "visor_cliente"]} />;
@@ -81,6 +94,35 @@ function Router() {
       <NotFound />
     </MacmillanLayout>
   );
+}
+
+function PasswordChangeRoute() {
+  const [, setLocation] = useLocation();
+  const { data: user, isLoading, isError } = useGetMe();
+
+  useEffect(() => {
+    if (!isLoading && (isError || !user)) {
+      setLocation("/");
+    }
+  }, [isLoading, isError, user, setLocation]);
+
+  useEffect(() => {
+    if (!isLoading && user && !user.mustChangePassword) {
+      setLocation(getDefaultRouteForRole(user.role));
+    }
+  }, [isLoading, user, setLocation]);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!user || !user.mustChangePassword) return null;
+
+  return <ChangePassword />;
 }
 
 function App() {

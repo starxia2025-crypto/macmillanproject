@@ -1,14 +1,14 @@
-import { int, nvarchar } from "drizzle-orm/mssql-core";
+import { int, varchar } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { usersTable } from "./users";
 import { tenantsTable } from "./tenants";
-import { createdAtColumn, dboSchema, idColumn, jsonTextColumn } from "./_shared";
+import { createdAtColumn, helpdeskTable, idColumn, jsonTextColumn } from "./_shared";
 
-export const auditLogsTable = dboSchema.table("SOP_audit_logs", {
+export const auditLogsTable = helpdeskTable("SOP_audit_logs", {
   id: idColumn(),
-  action: nvarchar("action", { length: 100 }).notNull(),
-  entityType: nvarchar("entity_type", { length: 100 }).notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 100 }).notNull(),
   entityId: int("entity_id").notNull(),
   userId: int("user_id").notNull().references(() => usersTable.id),
   tenantId: int("tenant_id").references(() => tenantsTable.id),

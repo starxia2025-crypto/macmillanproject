@@ -1,21 +1,21 @@
-import { int, nvarchar } from "drizzle-orm/mssql-core";
+import { int, varchar, longtext } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { tenantsTable } from "./tenants";
 import { usersTable } from "./users";
-import { boolColumn, createdAtColumn, dboSchema, idColumn, jsonTextColumn, updatedAtColumn } from "./_shared";
+import { boolColumn, createdAtColumn, helpdeskTable, idColumn, jsonTextColumn, updatedAtColumn } from "./_shared";
 
 export const documentTypeEnum = ["manual", "tutorial", "video", "faq", "link", "other"] as const;
 export type DocumentType = typeof documentTypeEnum[number];
 
-export const documentsTable = dboSchema.table("SOP_documents", {
+export const documentsTable = helpdeskTable("SOP_documents", {
   id: idColumn(),
-  title: nvarchar("title", { length: 500 }).notNull(),
-  description: nvarchar("description", { length: "max" }),
-  type: nvarchar("type", { length: 50 }).notNull().default("other"),
-  category: nvarchar("category", { length: 255 }),
-  url: nvarchar("url", { length: "max" }),
-  content: nvarchar("content", { length: "max" }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: longtext("description"),
+  type: varchar("type", { length: 50 }).notNull().default("other"),
+  category: varchar("category", { length: 255 }),
+  url: longtext("url"),
+  content: longtext("content"),
   tenantId: int("tenant_id").notNull().references(() => tenantsTable.id),
   tags: jsonTextColumn<string[]>("tags", "[]"),
   visibleToRoles: jsonTextColumn<string[]>("visible_to_roles", '["usuario_cliente","visor_cliente","tecnico","admin_cliente","superadmin"]'),

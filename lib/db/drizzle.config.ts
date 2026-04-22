@@ -1,11 +1,11 @@
 import { defineConfig } from "drizzle-kit";
 import path from "path";
-import { getSqlServerConnectionString } from "./src/sqlserver-env";
+import { getMySqlConnectionString } from "./src/mysql-env";
 
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),
-  dialect: "mssql",
+  dialect: "mysql",
   dbCredentials: {
-    url: getSqlServerConnectionString(),
+    url: getMySqlConnectionString(),
   },
 });

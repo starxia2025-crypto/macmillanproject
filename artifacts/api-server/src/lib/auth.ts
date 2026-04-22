@@ -36,12 +36,13 @@ export async function getSessionUser(token: string) {
       schoolName: schoolsTable.name,
       scopeType: usersTable.scopeType,
       active: usersTable.active,
+      mustChangePassword: usersTable.mustChangePassword,
     })
-    .top(1)
     .from(sessionsTable)
     .innerJoin(usersTable, eq(sessionsTable.userId, usersTable.id))
     .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
-    .where(and(eq(sessionsTable.sessionToken, token), gt(sessionsTable.expiresAt, new Date())));
+    .where(and(eq(sessionsTable.sessionToken, token), gt(sessionsTable.expiresAt, new Date())))
+    .limit(1);
   return result[0] ?? null;
 }
 
@@ -63,6 +64,17 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return;
   }
   (req as any).user = user;
+
+  const requestPath = req.originalUrl.split("?")[0] ?? "";
+  const isAllowedWhilePending =
+    requestPath.endsWith("/api/auth/change-password") ||
+    requestPath.endsWith("/api/auth/logout") ||
+    requestPath.endsWith("/api/auth/me");
+  if (user.mustChangePassword && !isAllowedWhilePending) {
+    res.status(403).json({ error: "PasswordChangeRequired", message: "Debes cambiar la contrasena antes de continuar." });
+    return;
+  }
+
   next();
 }
 

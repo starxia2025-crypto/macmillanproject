@@ -1,25 +1,25 @@
 import { sql } from "drizzle-orm";
-import { bit, datetime2, int, mssqlSchema, nvarchar } from "drizzle-orm/mssql-core";
+import { boolean, int, longtext, mysqlTable, timestamp } from "drizzle-orm/mysql-core";
 
-export const dboSchema = mssqlSchema("dbo");
+export const helpdeskTable = mysqlTable;
 
 export function idColumn(name = "id") {
-  return int(name).identity().primaryKey();
+  return int(name).autoincrement().primaryKey();
 }
 
 export function createdAtColumn(name = "created_at") {
-  return datetime2(name, { mode: "date" }).notNull().default(sql`SYSUTCDATETIME()`);
+  return timestamp(name, { mode: "date", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`);
 }
 
 export function updatedAtColumn(name = "updated_at") {
-  return datetime2(name, { mode: "date" }).notNull().default(sql`SYSUTCDATETIME()`);
+  return timestamp(name, { mode: "date", fsp: 3 }).notNull().default(sql`CURRENT_TIMESTAMP(3)`);
 }
 
 export function boolColumn(name: string, defaultValue: boolean) {
-  return bit(name).notNull().default(defaultValue);
+  return boolean(name).notNull().default(defaultValue);
 }
 
 export function jsonTextColumn<T>(name: string, fallbackJson: string | null = null) {
-  const column = nvarchar(name, { length: "max" }).$type<T>();
-  return fallbackJson === null ? column : column.notNull().default(fallbackJson as T);
+  const column = longtext(name).$type<string | null>();
+  return fallbackJson === null ? column : column.notNull().default(fallbackJson);
 }

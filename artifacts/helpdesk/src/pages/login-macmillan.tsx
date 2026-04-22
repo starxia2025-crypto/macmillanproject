@@ -1,4 +1,5 @@
-﻿import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,33 +15,116 @@ import meeLogo from "@/assets/mee-logo.svg";
 const loginSchema = z.object({
   email: z.string().email("Introduce un correo electrónico válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
+  captchaAnswer: z.string().optional(),
 });
 
+const LOGIN_BUTTON_COLOR = "#2563eb";
+const RECENT_LOGIN_EMAILS_STORAGE_KEY = "helpdesk-recent-login-emails";
+const MAX_RECENT_LOGIN_EMAILS = 5;
+
 type LoginFormValues = z.infer<typeof loginSchema>;
+type CaptchaChallenge = {
+  question: string;
+  token: string;
+};
+
+function readRecentLoginEmails() {
+  try {
+    const rawValue = window.localStorage.getItem(RECENT_LOGIN_EMAILS_STORAGE_KEY);
+    const parsedValue = rawValue ? JSON.parse(rawValue) : [];
+    return Array.isArray(parsedValue)
+      ? parsedValue.filter((value): value is string => typeof value === "string" && value.includes("@"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentLoginEmails(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) return readRecentLoginEmails();
+
+  const nextEmails = [
+    normalizedEmail,
+    ...readRecentLoginEmails().filter((recentEmail) => recentEmail.toLowerCase() !== normalizedEmail),
+  ].slice(0, MAX_RECENT_LOGIN_EMAILS);
+
+  window.localStorage.setItem(RECENT_LOGIN_EMAILS_STORAGE_KEY, JSON.stringify(nextEmails));
+  return nextEmails;
+}
 
 export default function MacmillanLogin() {
   const [, setLocation] = useLocation();
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
+  const [recentLoginEmails, setRecentLoginEmails] = useState<string[]>([]);
+  const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge | null>(null);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: "", password: "", captchaAnswer: "" },
   });
 
   const loginMutation = useLogin({
     mutation: {
-      onSuccess: (response) => setLocation(getDefaultRouteForRole(response.role)),
+      onSuccess: (response) => {
+        setCaptchaChallenge(null);
+        form.setValue("captchaAnswer", "");
+        setRecentLoginEmails(writeRecentLoginEmails(form.getValues("email")));
+        setLocation(response.mustChangePassword ? "/change-password" : getDefaultRouteForRole(response.role));
+      },
+      onError: (error) => {
+        const data = (error as any)?.data;
+        if (data?.captchaRequired && data?.captcha?.question && data?.captcha?.token) {
+          setCaptchaChallenge(data.captcha);
+          form.setValue("captchaAnswer", "");
+        }
+      },
     },
   });
 
+  useEffect(() => {
+    const emails = readRecentLoginEmails();
+    setRecentLoginEmails(emails);
+    if (emails[0] && !form.getValues("email")) {
+      form.setValue("email", emails[0], { shouldValidate: false });
+    }
+  }, [form]);
+
   function onSubmit(data: LoginFormValues) {
-    loginMutation.mutate({ data });
+    if (captchaChallenge && !data.captchaAnswer?.trim()) {
+      form.setError("captchaAnswer", { message: "Resuelve el captcha para continuar" });
+      return;
+    }
+
+    loginMutation.mutate({
+      data: {
+        email: data.email,
+        password: data.password,
+        captchaAnswer: data.captchaAnswer,
+        captchaToken: captchaChallenge?.token,
+      },
+    });
+  }
+
+  function selectRecentLoginEmail(email: string) {
+    form.setValue("email", email, { shouldDirty: true, shouldValidate: true });
+    passwordInputRef.current?.focus();
+  }
+
+  function clearRecentLoginEmails() {
+    window.localStorage.removeItem(RECENT_LOGIN_EMAILS_STORAGE_KEY);
+    setRecentLoginEmails([]);
   }
 
   function getLoginErrorMessage() {
     const rawMessage = loginMutation.error?.message || "";
 
-    if (rawMessage.includes("401") || rawMessage.toLowerCase().includes("credenciales incorrectas")) {
-      return "El correo o la contraseña no son correctos. Revisa tus datos e inténtalo de nuevo.";
+    if (
+      rawMessage.includes("401") ||
+      rawMessage.includes("429") ||
+      rawMessage.toLowerCase().includes("credenciales")
+    ) {
+      return "Credenciales no válidas";
     }
 
     if (rawMessage.toLowerCase().includes("failed to fetch")) {
@@ -139,6 +223,34 @@ export default function MacmillanLogin() {
                       <FormControl>
                         <Input placeholder="nombre@escuela.edu" {...field} className="h-11" />
                       </FormControl>
+                      {recentLoginEmails.length > 0 && (
+                        <div className="pt-2">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                              Usuarios recientes
+                            </p>
+                            <button
+                              type="button"
+                              onClick={clearRecentLoginEmails}
+                              className="text-xs font-medium text-slate-400 transition-colors hover:text-slate-700"
+                            >
+                              Limpiar
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {recentLoginEmails.map((email) => (
+                              <button
+                                key={email}
+                                type="button"
+                                onClick={() => selectRecentLoginEmail(email)}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
+                              >
+                                {email}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -151,18 +263,55 @@ export default function MacmillanLogin() {
                     <FormItem>
                       <div className="flex items-center justify-between">
                         <FormLabel>Contraseña</FormLabel>
-                        <a href="#" className="text-sm font-medium text-primary hover:underline">¿Olvidaste tu contraseña?</a>
+                        <Link href="/forgot-password">
+                          <span className="cursor-pointer text-sm font-medium text-primary hover:underline">¿Olvidaste tu contraseña?</span>
+                        </Link>
                       </div>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} className="h-11" />
+                        <Input
+                          type="password"
+                          placeholder="••••••••"
+                          {...field}
+                          ref={(element) => {
+                            field.ref(element);
+                            passwordInputRef.current = element;
+                          }}
+                          className="h-11"
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {captchaChallenge && (
+                  <FormField
+                    control={form.control}
+                    name="captchaAnswer"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Verificación de seguridad</FormLabel>
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                          <p className="mb-2 text-sm font-medium text-amber-900">
+                            Resuelve para continuar: <span className="font-bold">{captchaChallenge.question}</span>
+                          </p>
+                          <FormControl>
+                            <Input inputMode="numeric" placeholder="Resultado" {...field} className="h-11 bg-white" />
+                          </FormControl>
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
               </div>
 
-              <Button type="submit" className="h-11 w-full text-base font-medium" disabled={loginMutation.isPending}>
+              <Button
+                type="submit"
+                className="h-11 w-full text-base font-medium text-white hover:opacity-90"
+                style={{ backgroundColor: LOGIN_BUTTON_COLOR }}
+                disabled={loginMutation.isPending}
+              >
                 {loginMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />

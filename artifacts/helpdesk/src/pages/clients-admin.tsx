@@ -50,11 +50,22 @@ const textPalette = [
   { label: "Negro", value: "#111827" },
 ];
 
+const buttonPalette = [
+  { label: "Azul login", value: "#2563eb" },
+  { label: "Azul Macmillan", value: "#4f46e5" },
+  { label: "Verde aula", value: "#16a34a" },
+  { label: "Granate", value: "#7f1d1d" },
+  { label: "Naranja", value: "#f97316" },
+  { label: "Negro", value: "#111827" },
+];
+
 const tenantFormSchema = z.object({
   name: z.string().trim().min(2, "Indica el nombre del colegio"),
   contactEmail: z.union([z.literal(""), z.string().trim().email("Introduce un email valido")]).optional(),
+  primaryColor: z.string().min(1, "Selecciona un color para el boton de inicio de sesion"),
   sidebarBackgroundColor: z.string().min(1, "Selecciona un color para el menu"),
   sidebarTextColor: z.string().min(1, "Selecciona un color de texto"),
+  logoUrl: z.string().optional(),
   hasMochilasAccess: z.boolean().default(false),
   hasOrderLookup: z.boolean().default(false),
   hasReturnsAccess: z.boolean().default(false),
@@ -66,6 +77,8 @@ type QuickLinkDraft = {
   label: string;
   url: string;
   icon: string;
+  previewUrl?: string;
+  iconFile?: File;
 };
 type SchoolDraft = {
   id?: number;
@@ -85,14 +98,98 @@ type TenantRow = {
   totalTickets: number;
   createdAt: string;
   contactEmail?: string | null;
+  primaryColor?: string | null;
   sidebarBackgroundColor?: string | null;
   sidebarTextColor?: string | null;
+  logoUrl?: string | null;
   hasMochilasAccess?: boolean | null;
   hasOrderLookup?: boolean | null;
   hasReturnsAccess?: boolean | null;
   quickLinks?: Array<{ label: string; url: string; icon: string }> | null;
   schools?: Array<{ id: number; name: string; code?: string | null; isHeadquarters?: boolean; active: boolean }> | null;
 };
+
+function isQuickLinkImage(icon: string) {
+  const normalizedIcon = icon.trim();
+  return normalizedIcon.startsWith("data:image/") || normalizedIcon.startsWith("http://") || normalizedIcon.startsWith("https://");
+}
+
+function normalizeQuickLinkIcon(icon: string) {
+  const normalizedIcon = icon.trim();
+  return normalizedIcon || "🔗";
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string" && reader.result.trim()) {
+        resolve(reader.result.trim());
+        return;
+      }
+      reject(new Error("No se pudo convertir la imagen seleccionada."));
+    };
+    reader.onerror = () => reject(new Error("No se pudo leer la imagen seleccionada."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function removeSolidImageBackground(dataUrl: string) {
+  return new Promise<string>((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      const maxSize = 512;
+      const ratio = Math.min(1, maxSize / Math.max(image.width, image.height));
+      canvas.width = Math.max(1, Math.round(image.width * ratio));
+      canvas.height = Math.max(1, Math.round(image.height * ratio));
+
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) {
+        resolve(dataUrl);
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+      const pixels = imageData.data;
+      const cornerIndexes = [
+        0,
+        (canvas.width - 1) * 4,
+        ((canvas.height - 1) * canvas.width) * 4,
+        ((canvas.height - 1) * canvas.width + canvas.width - 1) * 4,
+      ];
+      const background = cornerIndexes.reduce(
+        (acc, index) => {
+          acc.r += pixels[index];
+          acc.g += pixels[index + 1];
+          acc.b += pixels[index + 2];
+          return acc;
+        },
+        { r: 0, g: 0, b: 0 },
+      );
+      background.r /= cornerIndexes.length;
+      background.g /= cornerIndexes.length;
+      background.b /= cornerIndexes.length;
+
+      const tolerance = 46;
+      for (let index = 0; index < pixels.length; index += 4) {
+        const distance =
+          Math.abs(pixels[index] - background.r) +
+          Math.abs(pixels[index + 1] - background.g) +
+          Math.abs(pixels[index + 2] - background.b);
+        if (distance < tolerance) {
+          pixels[index + 3] = 0;
+        }
+      }
+
+      context.putImageData(imageData, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = () => resolve(dataUrl);
+    image.src = dataUrl;
+  });
+}
 
 function slugifyTenantName(name: string) {
   const base = name
@@ -111,6 +208,8 @@ function createEmptyQuickLink(): QuickLinkDraft {
     label: "",
     url: "",
     icon: "",
+    previewUrl: undefined,
+    iconFile: undefined,
   };
 }
 
@@ -146,6 +245,8 @@ function mapQuickLinksToDrafts(quickLinks?: Array<{ label: string; url: string; 
     label: link.label ?? "",
     url: link.url ?? "",
     icon: link.icon ?? "",
+    previewUrl: undefined,
+    iconFile: undefined,
   }));
 }
 
@@ -187,8 +288,10 @@ export default function ClientsAdmin() {
     defaultValues: {
       name: "",
       contactEmail: "",
+      primaryColor: "#2563eb",
       sidebarBackgroundColor: "#0f172a",
       sidebarTextColor: "#ffffff",
+      logoUrl: "",
       hasMochilasAccess: false,
       hasOrderLookup: false,
       hasReturnsAccess: false,
@@ -197,6 +300,7 @@ export default function ClientsAdmin() {
 
   const sidebarBackgroundColor = form.watch("sidebarBackgroundColor");
   const sidebarTextColor = form.watch("sidebarTextColor");
+  const primaryColor = form.watch("primaryColor");
 
   function resetTenantForm() {
     setEditingTenant(null);
@@ -205,8 +309,10 @@ export default function ClientsAdmin() {
     form.reset({
       name: "",
       contactEmail: "",
+      primaryColor: "#2563eb",
       sidebarBackgroundColor: "#0f172a",
       sidebarTextColor: "#ffffff",
+      logoUrl: "",
       hasMochilasAccess: false,
       hasOrderLookup: false,
       hasReturnsAccess: false,
@@ -225,8 +331,10 @@ export default function ClientsAdmin() {
     form.reset({
       name: tenant.name,
       contactEmail: tenant.contactEmail ?? "",
+      primaryColor: tenant.primaryColor || "#2563eb",
       sidebarBackgroundColor: tenant.sidebarBackgroundColor || "#0f172a",
       sidebarTextColor: tenant.sidebarTextColor || "#ffffff",
+      logoUrl: tenant.logoUrl || "",
       hasMochilasAccess: Boolean(tenant.hasMochilasAccess),
       hasOrderLookup: Boolean(tenant.hasOrderLookup),
       hasReturnsAccess: Boolean(tenant.hasReturnsAccess),
@@ -283,13 +391,17 @@ export default function ClientsAdmin() {
     },
   });
 
-  function normalizeQuickLinks() {
-    return quickLinks
-      .filter((link) => link.label.trim() || link.url.trim() || link.icon.trim())
-      .map((link, index) => {
+  async function normalizeQuickLinks() {
+    const normalizedLinks = [];
+
+    for (const [index, link] of quickLinks.entries()) {
+      if (!(link.label.trim() || link.url.trim() || link.icon.trim() || link.iconFile)) {
+        continue;
+      }
+
         const url = link.url.trim();
         const label = link.label.trim() || inferQuickLinkLabel(url);
-        const icon = link.icon.trim();
+        const icon = link.iconFile ? await readFileAsDataUrl(link.iconFile) : normalizeQuickLinkIcon(link.icon);
 
         if (!url) {
           throw new Error(`Completa la URL en el acceso directo ${index + 1}.`);
@@ -305,8 +417,10 @@ export default function ClientsAdmin() {
           throw new Error(`Completa el nombre del acceso directo ${index + 1}.`);
         }
 
-        return { label, url, icon: icon || "LINK" };
-      });
+      normalizedLinks.push({ label, url, icon });
+    }
+
+    return normalizedLinks;
   }
 
   function normalizeSchools() {
@@ -328,7 +442,7 @@ export default function ClientsAdmin() {
     return normalized;
   }
 
-  function onSubmit(values: TenantFormValues) {
+  async function onSubmit(values: TenantFormValues) {
     if (!canManageTenants) {
       toast({
         title: "Accion no permitida",
@@ -339,13 +453,15 @@ export default function ClientsAdmin() {
     }
 
     try {
-      const normalizedQuickLinks = normalizeQuickLinks();
+      const normalizedQuickLinks = await normalizeQuickLinks();
       const normalizedSchools = normalizeSchools();
       const payload = {
         name: values.name.trim(),
         ...(values.contactEmail ? { contactEmail: values.contactEmail.trim().toLowerCase() } : { contactEmail: null }),
+        primaryColor: values.primaryColor,
         sidebarBackgroundColor: values.sidebarBackgroundColor,
         sidebarTextColor: values.sidebarTextColor,
+        logoUrl: values.logoUrl?.trim() || null,
         hasMochilasAccess: values.hasMochilasAccess,
         hasOrderLookup: values.hasOrderLookup,
         hasReturnsAccess: values.hasReturnsAccess,
@@ -425,20 +541,55 @@ export default function ClientsAdmin() {
       return;
     }
 
-    if (file.size > 1024 * 1024) {
+    if (file.size > 8 * 1024 * 1024) {
       toast({
         title: "Icono demasiado grande",
-        description: "Usa una imagen de hasta 1 MB para el acceso directo.",
+        description: "Usa una imagen o GIF de hasta 8 MB para el acceso directo.",
         variant: "destructive",
       });
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateQuickLink(id, { icon: typeof reader.result === "string" ? reader.result : "" });
-    };
-    reader.readAsDataURL(file);
+    const previewUrl = URL.createObjectURL(file);
+    updateQuickLink(id, {
+      icon: "",
+      iconFile: file,
+      previewUrl,
+    });
+  }
+
+  async function onTenantLogoSelected(file?: File | null) {
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Logotipo no valido",
+        description: "Selecciona una imagen PNG, JPG, SVG o similar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 8 * 1024 * 1024) {
+      toast({
+        title: "Logotipo demasiado grande",
+        description: "Usa una imagen de hasta 8 MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const rawLogoUrl = await readFileAsDataUrl(file);
+      const logoUrl = file.type === "image/svg+xml" ? rawLogoUrl : await removeSolidImageBackground(rawLogoUrl);
+      form.setValue("logoUrl", logoUrl, { shouldDirty: true, shouldValidate: true });
+    } catch (error) {
+      toast({
+        title: "No se pudo cargar el logotipo",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo.",
+        variant: "destructive",
+      });
+    }
   }
 
   function setTenantActive(tenant: TenantRow, active: boolean) {
@@ -507,7 +658,71 @@ export default function ClientsAdmin() {
                       )}
                     />
 
+                    <FormField
+                      control={form.control}
+                      name="logoUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Logotipo del colegio</FormLabel>
+                          <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white">
+                              {field.value ? (
+                                <img src={field.value} alt="Logotipo del colegio" className="h-full w-full object-contain p-2" />
+                              ) : (
+                                <Building2 className="h-7 w-7 text-slate-400" />
+                              )}
+                            </div>
+                            <div className="flex-1 space-y-2">
+                              <FormControl>
+                                <Input placeholder="URL del logotipo o sube una imagen" {...field} />
+                              </FormControl>
+                              <div className="flex flex-wrap gap-2">
+                                <label htmlFor="tenant-logo-upload" className="inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                  <Upload className="h-4 w-4" />
+                                  Subir logotipo
+                                </label>
+                                {field.value && (
+                                  <Button type="button" variant="ghost" size="sm" onClick={() => field.onChange("")}>
+                                    Quitar logotipo
+                                  </Button>
+                                )}
+                              </div>
+                              <input
+                                id="tenant-logo-upload"
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(event) => {
+                                  void onTenantLogoSelected(event.target.files?.[0]);
+                                  event.currentTarget.value = "";
+                                }}
+                              />
+                            </div>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <div className="grid gap-4 md:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="primaryColor"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color del botón de inicio de sesión</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl><SelectTrigger><SelectValue placeholder="Selecciona un color" /></SelectTrigger></FormControl>
+                              <SelectContent>
+                                {buttonPalette.map((color) => (
+                                  <SelectItem key={color.value} value={color.value}>{color.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                       <FormField
                         control={form.control}
                         name="sidebarBackgroundColor"
@@ -526,6 +741,9 @@ export default function ClientsAdmin() {
                           </FormItem>
                         )}
                       />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
                       <FormField
                         control={form.control}
                         name="sidebarTextColor"
@@ -633,12 +851,25 @@ export default function ClientsAdmin() {
                         Vista previa del menu lateral
                       </div>
                       <div className="rounded-xl p-3" style={{ backgroundColor: sidebarBackgroundColor, color: sidebarTextColor }}>
-                        <div className="mb-2 text-sm font-semibold opacity-80">Centro de ayuda</div>
+                        <div className="mb-4 flex items-center gap-3">
+                          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-white/95">
+                            {form.watch("logoUrl") ? (
+                              <img src={form.watch("logoUrl")} alt="Logotipo" className="h-full w-full object-contain p-1.5" />
+                            ) : (
+                              <Building2 className="h-5 w-5 opacity-70" />
+                            )}
+                          </div>
+                          <div className="text-base font-bold leading-tight">{form.watch("name") || "Nombre del colegio"}</div>
+                        </div>
                         <div className="space-y-2 text-sm">
                           <div className="rounded-md px-3 py-2" style={{ backgroundColor: `${sidebarTextColor}22` }}>Tickets de consulta</div>
                           <div className="rounded-md px-3 py-2">Miembros del equipo</div>
-                          <div className="mt-3 border-t border-white/20 pt-3 text-base font-bold">{form.watch("name") || "Nombre del colegio"}</div>
                         </div>
+                      </div>
+                      <div className="mt-3">
+                        <Button type="button" className="h-10 w-full text-white hover:opacity-90" style={{ backgroundColor: primaryColor }}>
+                          Iniciar sesión
+                        </Button>
                       </div>
                     </div>
 
@@ -737,24 +968,29 @@ export default function ClientsAdmin() {
                                     onChange={(event) => updateQuickLink(link.id, { url: event.target.value })}
                                   />
                                 </div>
-                                <label className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                <label htmlFor={`quick-link-icon-${link.id}`} className="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
                                   <Upload className="h-4 w-4" />
                                   <span>Subir icono</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="sr-only"
-                                    onChange={(event) => onShortcutIconSelected(link.id, event.target.files?.[0])}
-                                  />
                                 </label>
+                                <input
+                                  id={`quick-link-icon-${link.id}`}
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    onShortcutIconSelected(link.id, event.target.files?.[0]);
+                                    event.currentTarget.blur();
+                                    event.currentTarget.value = "";
+                                  }}
+                                />
                               </div>
                               <div className="mt-3 flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2">
                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border bg-white">
-                                  {link.icon ? (
-                                    link.icon.startsWith("data:") || link.icon.startsWith("http") ? (
-                                      <img src={link.icon} alt={link.label || "Icono"} className="h-6 w-6 object-contain" />
+                                  {link.previewUrl || link.icon ? (
+                                    link.previewUrl || isQuickLinkImage(link.icon) ? (
+                                      <img src={link.previewUrl || link.icon.trim()} alt={link.label || "Icono"} className="h-6 w-6 object-contain" />
                                     ) : (
-                                      <span className="text-xs font-semibold text-slate-500">{link.icon}</span>
+                                      <span className="text-xs font-semibold text-slate-500">{normalizeQuickLinkIcon(link.icon)}</span>
                                     )
                                   ) : (
                                     <LinkIcon className="h-5 w-5 text-slate-400" />
@@ -836,9 +1072,13 @@ export default function ClientsAdmin() {
               tenantsData?.data.map((tenant) => (
                 <TableRow key={tenant.id} className="group">
                   <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400">
-                        <Building2 className="h-5 w-5" />
+                      <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400">
+                        {tenant.logoUrl ? (
+                          <img src={tenant.logoUrl} alt={tenant.name} className="h-full w-full object-contain p-1.5" />
+                        ) : (
+                          <Building2 className="h-5 w-5" />
+                        )}
                       </div>
                       <div>
                         <div className="font-medium text-slate-900 dark:text-slate-100">{tenant.name}</div>

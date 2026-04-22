@@ -6,3 +6,4 @@ export * from "./documents";
 export * from "./audit_logs";
 export * from "./sessions";
 export * from "./schools";
+export * from "./system_alerts";

@@ -51,7 +51,7 @@ const createUserSchema = z.object({
   tenantId: z.coerce.number().optional(),
   schoolId: z.coerce.number().optional(),
   scopeType: z.enum(["global", "tenant", "school"]),
-  password: z.string().min(8, "La contrasena debe tener al menos 8 caracteres"),
+  password: z.string().min(12, "La contrasena debe tener al menos 12 caracteres"),
 });
 
 const editUserSchema = z.object({
@@ -87,13 +87,14 @@ export default function Users() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const canCreateUsersWithPassword = currentUser?.role === "superadmin" || currentUser?.role === "tecnico";
 
   const { data: usersData, isLoading, refetch } = useListUsers({
     page,
     limit: 100,
     search: search || undefined,
     role: roleFilter !== "all" ? roleFilter : undefined,
-    tenantId: currentUser?.role === "superadmin" ? undefined : currentUser?.tenantId,
+    tenantId: currentUser?.role === "superadmin" || currentUser?.role === "tecnico" ? undefined : currentUser?.tenantId,
   });
 
   const { data: tenantsData } = useListTenants(
@@ -387,19 +388,20 @@ export default function Users() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Usuarios</h1>
           <p className="mt-1 text-slate-500">Gestiona accesos, roles y estado de los miembros del sistema.</p>
         </div>
-        <Dialog
-          open={createOpen}
-          onOpenChange={(nextOpen) => {
-            setCreateOpen(nextOpen);
-            if (!nextOpen) resetCreateForm();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button className="shrink-0 gap-2">
-              <Plus className="h-4 w-4" />
-              Anadir usuario
-            </Button>
-          </DialogTrigger>
+        {canCreateUsersWithPassword && (
+          <Dialog
+            open={createOpen}
+            onOpenChange={(nextOpen) => {
+              setCreateOpen(nextOpen);
+              if (!nextOpen) resetCreateForm();
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button className="shrink-0 gap-2">
+                <Plus className="h-4 w-4" />
+                Anadir usuario
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Crear nuevo usuario</DialogTitle>
@@ -545,7 +547,7 @@ export default function Users() {
                 <FormField control={createForm.control} name="password" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Contrasena temporal</FormLabel>
-                    <FormControl><Input type="password" placeholder="Minimo 8 caracteres" {...field} /></FormControl>
+                    <FormControl><Input type="password" placeholder="Minimo 12 caracteres" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -557,7 +559,8 @@ export default function Users() {
               </form>
             </Form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        )}
       </div>
 
       <Dialog open={editOpen} onOpenChange={(nextOpen) => { setEditOpen(nextOpen); if (!nextOpen) setEditingUser(null); }}>

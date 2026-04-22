@@ -19,7 +19,7 @@ const createUserSchema = z.object({
   tenantId: z.number().nullable().optional(),
   schoolId: z.number().nullable().optional(),
   scopeType: z.enum(userScopeTypes).optional(),
-  password: z.string().min(8),
+  password: z.string().min(12),
 });
 
 const updateUserSchema = z.object({
@@ -31,9 +31,9 @@ const updateUserSchema = z.object({
   scopeType: z.enum(userScopeTypes).optional(),
 });
 
-function isSqlServerDuplicateError(error: any) {
-  const sqlServerNumber = error?.number ?? error?.originalError?.info?.number ?? error?.precedingErrors?.[0]?.number;
-  return error?.code === "23505" || error?.code === "2627" || error?.code === "2601" || sqlServerNumber === 2627 || sqlServerNumber === 2601;
+function isDuplicateEntryError(error: any) {
+  const driverNumber = error?.errno ?? error?.code ?? error?.cause?.errno;
+  return error?.code === "ER_DUP_ENTRY" || driverNumber === 1062 || driverNumber === "1062";
 }
 
 function getDefaultScopeTypeForRole(role: (typeof userRoles)[number]) {
@@ -59,9 +59,9 @@ async function getSchoolById(schoolId: number) {
       name: schoolsTable.name,
       active: schoolsTable.active,
     })
-    .top(1)
     .from(schoolsTable)
-    .where(eq(schoolsTable.id, schoolId));
+    .where(eq(schoolsTable.id, schoolId))
+    .limit(1);
 
   return schools[0] ?? null;
 }
@@ -146,8 +146,8 @@ router.get("/", requireAuth, async (req, res) => {
             .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
             .where(where)
             .orderBy(usersTable.createdAt)
+            .limit(limit)
             .offset(offset)
-            .fetch(limit)
         : db.select({
             id: usersTable.id,
             email: usersTable.email,
@@ -162,12 +162,12 @@ router.get("/", requireAuth, async (req, res) => {
             tenantName: tenantsTable.name,
             schoolName: schoolsTable.name,
           })
-            .top(limit)
             .from(usersTable)
             .leftJoin(tenantsTable, eq(usersTable.tenantId, tenantsTable.id))
             .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
             .where(where)
             .orderBy(usersTable.createdAt)
+            .limit(limit)
     ),
     db.select({ count: count() }).from(usersTable).where(where),
   ]);
@@ -176,7 +176,7 @@ router.get("/", requireAuth, async (req, res) => {
   res.json({ data: users, total, page, limit, totalPages: Math.ceil(total / limit) });
 });
 
-router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnico"), async (req, res) => {
+router.post("/", requireAuth, requireRole("superadmin", "tecnico"), async (req, res) => {
   const authUser = (req as any).user;
   const parsed = createUserSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -213,6 +213,7 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
       schoolId: requestedScope.schoolId,
       scopeType: requestedScope.scopeType,
       passwordHash,
+      mustChangePassword: true,
     });
 
     const createdUsers = await db
@@ -230,11 +231,11 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
         tenantName: tenantsTable.name,
         schoolName: schoolsTable.name,
       })
-      .top(1)
       .from(usersTable)
       .leftJoin(tenantsTable, eq(usersTable.tenantId, tenantsTable.id))
       .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
-      .where(eq(usersTable.email, parsed.data.email.toLowerCase()));
+      .where(eq(usersTable.email, parsed.data.email.toLowerCase()))
+      .limit(1);
 
     const createdUser = createdUsers[0];
     if (!createdUser) {
@@ -263,7 +264,7 @@ router.post("/", requireAuth, requireRole("superadmin", "admin_cliente", "tecnic
       return;
     }
 
-    if (isSqlServerDuplicateError(error)) {
+    if (isDuplicateEntryError(error)) {
       res.status(409).json({ error: "Conflict", message: "Ya existe un usuario con ese correo." });
       return;
     }
@@ -292,11 +293,11 @@ router.get("/:userId", requireAuth, async (req, res) => {
       tenantName: tenantsTable.name,
       schoolName: schoolsTable.name,
     })
-    .top(1)
     .from(usersTable)
     .leftJoin(tenantsTable, eq(usersTable.tenantId, tenantsTable.id))
     .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
-    .where(eq(usersTable.id, userId));
+    .where(eq(usersTable.id, userId))
+    .limit(1);
 
   const user = users[0];
   if (!user) {
@@ -324,7 +325,7 @@ router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente",
     return;
   }
 
-  const users = await db.select().top(1).from(usersTable).where(eq(usersTable.id, userId));
+  const users = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
   const user = users[0];
   if (!user) {
     res.status(404).json({ error: "NotFound", message: "User not found" });
@@ -337,12 +338,12 @@ router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente",
   }
 
   try {
-    const nextRole = parsed.data.role ?? user.role;
+    const nextRole = (parsed.data.role ?? user.role) as (typeof userRoles)[number];
     const resolvedScope = await resolveUserScopeInput({
       role: nextRole,
       tenantId: parsed.data.tenantId ?? user.tenantId,
       schoolId: parsed.data.schoolId ?? user.schoolId,
-      scopeType: parsed.data.scopeType ?? user.scopeType,
+      scopeType: (parsed.data.scopeType ?? user.scopeType) as (typeof userScopeTypes)[number] | undefined,
     });
 
     if (authUser.role === "admin_cliente") {
@@ -384,11 +385,11 @@ router.patch("/:userId", requireAuth, requireRole("superadmin", "admin_cliente",
         tenantName: tenantsTable.name,
         schoolName: schoolsTable.name,
       })
-      .top(1)
       .from(usersTable)
       .leftJoin(tenantsTable, eq(usersTable.tenantId, tenantsTable.id))
       .leftJoin(schoolsTable, eq(usersTable.schoolId, schoolsTable.id))
-      .where(eq(usersTable.id, userId));
+      .where(eq(usersTable.id, userId))
+      .limit(1);
 
     const updatedUser = updatedUsers[0];
     if (!updatedUser) {

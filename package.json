@@ -2,15 +2,52 @@
   "name": "workspace",
   "version": "0.0.0",
   "license": "MIT",
+  "main": "desktop/main.cjs",
   "scripts": {
     "preinstall": "node -e \"const fs=require('fs'); ['package-lock.json','yarn.lock'].forEach((file)=>{ if(fs.existsSync(file)) fs.unlinkSync(file); }); const ua=process.env.npm_config_user_agent||''; if(!ua.startsWith('pnpm/')){ console.error('Use pnpm instead'); process.exit(1); }\"",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "desktop:build": "cross-env PORT=4173 BASE_PATH=/ VITE_API_BASE_URL=http://localhost:3002 pnpm --filter @workspace/helpdesk run build && pnpm --filter @workspace/api-server run build",
+    "desktop:start": "pnpm run desktop:build && electron .",
+    "desktop:dist": "pnpm run desktop:build && electron-builder --win nsis"
   },
   "private": true,
   "devDependencies": {
-    "typescript": "~5.9.2",
-    "prettier": "^3.8.1"
+    "cross-env": "10.1.0",
+    "electron": "37.4.0",
+    "electron-builder": "^26.0.12",
+    "prettier": "^3.8.1",
+    "typescript": "~5.9.2"
+  },
+  "build": {
+    "appId": "com.macmillan.helpdesk",
+    "productName": "Soporte Macmillan",
+    "asar": true,
+    "files": [
+      "desktop/**/*",
+      "artifacts/api-server/dist/**/*",
+      "artifacts/helpdesk/dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".env.local",
+        "to": ".env.local"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

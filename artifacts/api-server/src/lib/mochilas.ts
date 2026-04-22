@@ -1,5 +1,4 @@
-import mssql from "mssql";
-import { createMochilasSqlServerPool } from "@workspace/db";
+import { pool } from "@workspace/db";
 
 export type MochilaRow = {
   schoolName: string | null;
@@ -28,43 +27,44 @@ export type MochilaLookupResult = {
   records: MochilaRow[];
 };
 
-let mochilasPool: mssql.ConnectionPool | null = null;
-let mochilasPoolPromise: Promise<mssql.ConnectionPool> | null = null;
+type MochilaQueryRow = {
+  school_name: string | null;
+  student_name: string | null;
+  student_surname: string | null;
+  student_email: string | null;
+  type: string | null;
+  student_user: string | null;
+  student_password: string | null;
+  token: string | null;
+  description: string | null;
+  ean: string | null;
+  id_order: string | null;
+  id_consigna_order: number;
+  esGoogle: number | boolean | null;
+};
 
-async function getMochilasPool() {
-  if (mochilasPool) return mochilasPool;
-  if (!mochilasPoolPromise) {
-    const pool = createMochilasSqlServerPool();
-    mochilasPoolPromise = pool.connect().then((connectedPool) => {
-      mochilasPool = connectedPool;
-      return connectedPool;
-    });
-  }
-
-  return mochilasPoolPromise;
+function mapMochilaRow(row: MochilaQueryRow): MochilaRow {
+  return {
+    schoolName: row.school_name,
+    studentName: row.student_name,
+    studentSurname: row.student_surname,
+    studentEmail: row.student_email,
+    type: row.type,
+    studentUser: row.student_user,
+    studentPassword: row.student_password,
+    token: row.token,
+    description: row.description,
+    ean: row.ean,
+    idOrder: row.id_order,
+    idConsignaOrder: row.id_consigna_order,
+    esGoogle: row.esGoogle === null ? null : Boolean(row.esGoogle),
+  };
 }
 
 export async function findMochilasStudentByEmail(email: string): Promise<MochilaLookupResult | null> {
   const normalizedEmail = email.trim().toLowerCase();
-  const pool = await getMochilasPool();
-  const result = await pool
-    .request()
-    .input("studentEmail", mssql.NVarChar(255), normalizedEmail)
-    .query<{
-      school_name: string | null;
-      student_name: string | null;
-      student_surname: string | null;
-      student_email: string | null;
-      type: string | null;
-      student_user: string | null;
-      student_password: string | null;
-      token: string | null;
-      description: string | null;
-      ean: string | null;
-      id_order: string | null;
-      id_consigna_order: number;
-      esGoogle: boolean | null;
-    }>(`
+  const [rows] = await pool.execute(
+    `
       SELECT
         school_name,
         student_name,
@@ -79,30 +79,19 @@ export async function findMochilasStudentByEmail(email: string): Promise<Mochila
         id_order,
         id_consigna_order,
         esGoogle
-      FROM dbo.MOC_Mochilas
-      WHERE LOWER(LTRIM(RTRIM(student_email))) = @studentEmail
+      FROM MOC_Mochilas
+      WHERE LOWER(TRIM(student_email)) = ?
       ORDER BY school_name, id_consigna_order
-    `);
+    `,
+    [normalizedEmail],
+  );
 
-  if (!result.recordset.length) {
+  const matchedRows = rows as MochilaQueryRow[];
+  if (!matchedRows.length) {
     return null;
   }
 
-  const records: MochilaRow[] = result.recordset.map((row) => ({
-    schoolName: row.school_name,
-    studentName: row.student_name,
-    studentSurname: row.student_surname,
-    studentEmail: row.student_email,
-    type: row.type,
-    studentUser: row.student_user,
-    studentPassword: row.student_password,
-    token: row.token,
-    description: row.description,
-    ean: row.ean,
-    idOrder: row.id_order,
-    idConsignaOrder: row.id_consigna_order,
-    esGoogle: row.esGoogle,
-  }));
+  const records = matchedRows.map((row: MochilaQueryRow) => mapMochilaRow(row));
 
   const first = records[0];
   return {
@@ -119,25 +108,8 @@ export async function findMochilasStudentByEmail(email: string): Promise<Mochila
 
 export async function findMochilasStudentByOrderId(orderId: string): Promise<MochilaLookupResult | null> {
   const normalizedOrderId = orderId.trim();
-  const pool = await getMochilasPool();
-  const result = await pool
-    .request()
-    .input("orderId", mssql.NVarChar(50), normalizedOrderId)
-    .query<{
-      school_name: string | null;
-      student_name: string | null;
-      student_surname: string | null;
-      student_email: string | null;
-      type: string | null;
-      student_user: string | null;
-      student_password: string | null;
-      token: string | null;
-      description: string | null;
-      ean: string | null;
-      id_order: string | null;
-      id_consigna_order: number;
-      esGoogle: boolean | null;
-    }>(`
+  const [rows] = await pool.execute(
+    `
       SELECT
         school_name,
         student_name,
@@ -149,33 +121,23 @@ export async function findMochilasStudentByOrderId(orderId: string): Promise<Moc
         token,
         description,
         ean,
-        [id_order] AS id_order,
+        id_order,
         id_consigna_order,
         esGoogle
-      FROM dbo.MOC_Mochilas
-      WHERE ISNULL(LTRIM(RTRIM([id_order])), '') = @orderId
-      ORDER BY school_name, [id_order], id_consigna_order
-    `);
+      FROM MOC_Mochilas
+      WHERE COALESCE(TRIM(id_order), '') = ?
+        AND LOWER(TRIM(type)) IN ('mochila', 'mochila_blink')
+      ORDER BY school_name, id_order, id_consigna_order
+    `,
+    [normalizedOrderId],
+  );
 
-  if (!result.recordset.length) {
+  const matchedRows = rows as MochilaQueryRow[];
+  if (!matchedRows.length) {
     return null;
   }
 
-  const records: MochilaRow[] = result.recordset.map((row) => ({
-    schoolName: row.school_name,
-    studentName: row.student_name,
-    studentSurname: row.student_surname,
-    studentEmail: row.student_email,
-    type: row.type,
-    studentUser: row.student_user,
-    studentPassword: row.student_password,
-    token: row.token,
-    description: row.description,
-    ean: row.ean,
-    idOrder: row.id_order,
-    idConsignaOrder: row.id_consigna_order,
-    esGoogle: row.esGoogle,
-  }));
+  const records = matchedRows.map((row: MochilaQueryRow) => mapMochilaRow(row));
 
   const first = records[0];
   return {

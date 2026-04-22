@@ -12,15 +12,13 @@
     "push-force": "drizzle-kit push --force --config ./drizzle.config.ts"
   },
   "dependencies": {
-    "@azure/identity": "^4.13.1",
-    "drizzle-orm": "beta",
+    "drizzle-orm": "catalog:",
     "drizzle-zod": "^0.8.3",
-    "mssql": "^11.0.1",
+    "mysql2": "^3.15.3",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@types/mssql": "^9.1.11",
     "@types/node": "catalog:",
-    "drizzle-kit": "beta"
+    "drizzle-kit": "^0.31.4"
   }
 }

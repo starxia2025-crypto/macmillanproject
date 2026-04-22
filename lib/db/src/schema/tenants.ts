@@ -1,26 +1,26 @@
-import { nvarchar } from "drizzle-orm/mssql-core";
+import { varchar, longtext } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
-import { boolColumn, createdAtColumn, dboSchema, idColumn, jsonTextColumn, updatedAtColumn } from "./_shared";
+import { boolColumn, createdAtColumn, helpdeskTable, idColumn, jsonTextColumn, updatedAtColumn } from "./_shared";
 
-export const tenantsTable = dboSchema.table("SOP_tenants", {
+export const tenantsTable = helpdeskTable("SOP_tenants", {
   id: idColumn(),
-  name: nvarchar("name", { length: 255 }).notNull(),
-  slug: nvarchar("slug", { length: 100 }).notNull().unique(),
-  legalName: nvarchar("legal_name", { length: 255 }),
-  educationGroupType: nvarchar("education_group_type", { length: 80 }).default("school_group"),
-  dbSchema: nvarchar("db_schema", { length: 100 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  legalName: varchar("legal_name", { length: 255 }),
+  educationGroupType: varchar("education_group_type", { length: 80 }).default("school_group"),
+  dbSchema: varchar("db_schema", { length: 100 }),
   active: boolColumn("active", true),
-  logoUrl: nvarchar("logo_url", { length: "max" }),
-  primaryColor: nvarchar("primary_color", { length: 20 }),
-  sidebarBackgroundColor: nvarchar("sidebar_background_color", { length: 20 }),
-  sidebarTextColor: nvarchar("sidebar_text_color", { length: 20 }),
+  logoUrl: longtext("logo_url"),
+  primaryColor: varchar("primary_color", { length: 20 }),
+  sidebarBackgroundColor: varchar("sidebar_background_color", { length: 20 }),
+  sidebarTextColor: varchar("sidebar_text_color", { length: 20 }),
   hasMochilasAccess: boolColumn("has_mochilas_access", false),
   hasOrderLookup: boolColumn("has_order_lookup", false),
   hasReturnsAccess: boolColumn("has_returns_access", false),
   quickLinks: jsonTextColumn<Array<{ label: string; url: string; icon: string }>>("quick_links", "[]"),
-  contactEmail: nvarchar("contact_email", { length: 255 }),
-  supportEmail: nvarchar("support_email", { length: 255 }),
+  contactEmail: varchar("contact_email", { length: 255 }),
+  supportEmail: varchar("support_email", { length: 255 }),
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
 });

@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { CreateDocumentRequestType, useCreateDocument, useGetMe, useListDocuments, useListTenants } from "@workspace/api-client-react";
+import { useGetMe, useListDocuments, useListTenants } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Search, Book, Video, HelpCircle, Link as LinkIcon, FileText, FileDown, Plus, Upload } from "lucide-react";
+import { Search, Book, Video, HelpCircle, Link as LinkIcon, FileText, FileDown, Plus, Upload, Pencil, Trash2 } from "lucide-react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -53,6 +53,7 @@ export default function PortalAdmin() {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
 
   const { data: docsData, isLoading, refetch } = useListDocuments({
     tenantId: user?.role === "superadmin" ? undefined : user?.tenantId,
@@ -81,40 +82,13 @@ export default function PortalAdmin() {
     },
   });
 
-  const createDocument = useCreateDocument({
-    mutation: {
-      onSuccess: async () => {
-        toast({
-          title: "Contenido publicado",
-          description: "El recurso ya esta disponible en el portal.",
-        });
-        setOpen(false);
-        setSelectedFile(null);
-        form.reset({
-          title: "",
-          description: "",
-          type: "manual",
-          category: "general",
-          url: "",
-          content: "",
-          tenantId: user?.tenantId ?? undefined,
-          tags: "",
-          published: true,
-        });
-        await refetch();
-      },
-      onError: (error) => {
-        toast({
-          title: "No se pudo publicar el contenido",
-          description: error instanceof Error ? error.message : "Revisa los datos e intentalo de nuevo.",
-          variant: "destructive",
-        });
-      },
-    },
-  });
-
   const canManageContent = ["superadmin", "admin_cliente", "tecnico", "manager"].includes(user?.role || "");
   const documents = docsData?.data ?? [];
+  const tenantConfig = user as any;
+  const portalHeroColor =
+    tenantConfig?.tenantPrimaryColor ||
+    tenantConfig?.tenantSidebarBackgroundColor ||
+    "#4f46e5";
 
   const categories = useMemo(
     () => ["all", ...Array.from(new Set(documents.map((doc) => doc.category).filter(Boolean) as string[]))],
@@ -122,6 +96,7 @@ export default function PortalAdmin() {
   );
 
   function resetComposer() {
+    setEditingDocumentId(null);
     setSelectedFile(null);
     form.reset({
       title: "",
@@ -196,12 +171,14 @@ export default function PortalAdmin() {
       const resolvedContent = uploadedFile
         ? [values.content?.trim(), `Archivo adjunto: ${uploadedFile.fileName}`].filter(Boolean).join("\n\n")
         : (values.content || null);
-
-      createDocument.mutate({
-        data: {
+      const response = await fetch(buildApiUrl(editingDocumentId ? `/api/documents/${editingDocumentId}` : "/api/documents"), {
+        method: editingDocumentId ? "PATCH" : "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           title: values.title,
           description: values.description || (uploadedFile ? `Descarga disponible: ${uploadedFile.fileName}` : null),
-          type: values.type as CreateDocumentRequestType,
+          type: values.type,
           category: values.category || null,
           url: resolvedUrl,
           content: resolvedContent,
@@ -209,12 +186,69 @@ export default function PortalAdmin() {
           tags: values.tags ? values.tags.split(",").map((tag) => tag.trim()).filter(Boolean) : [],
           visibleToRoles: ["usuario_cliente", "visor_cliente", "manager", "tecnico", "admin_cliente", "superadmin"],
           published: values.published,
-        },
+        }),
       });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || "Se ha producido un error interno en el servidor.");
+      }
+
+      toast({
+        title: editingDocumentId ? "Contenido actualizado" : "Contenido publicado",
+        description: editingDocumentId ? "Los cambios ya estan guardados." : "El recurso ya esta disponible en el portal.",
+      });
+      setOpen(false);
+      resetComposer();
+      await refetch();
     } catch (error) {
       toast({
-        title: "No se pudo subir el archivo",
+        title: "No se pudo publicar el contenido",
         description: error instanceof Error ? error.message : "Revisa el archivo e intentalo de nuevo.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  function openEditDialog(doc: any) {
+    setEditingDocumentId(doc.id);
+    setSelectedFile(null);
+    form.reset({
+      title: doc.title || "",
+      description: doc.description || "",
+      type: doc.type || "manual",
+      category: doc.category || "general",
+      url: doc.url || "",
+      content: doc.content || "",
+      tenantId: doc.tenantId ?? user?.tenantId ?? undefined,
+      tags: Array.isArray(doc.tags) ? doc.tags.join(", ") : "",
+      published: doc.published ?? true,
+    });
+    setOpen(true);
+  }
+
+  async function deleteDocument(documentId: number) {
+    if (!window.confirm("¿Eliminar este contenido del centro de ayuda?")) return;
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/documents/${documentId}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || "No se pudo eliminar el contenido.");
+      }
+
+      toast({
+        title: "Contenido eliminado",
+        description: "El recurso ya no aparece en el portal.",
+      });
+      await refetch();
+    } catch (error) {
+      toast({
+        title: "No se pudo eliminar el contenido",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo.",
         variant: "destructive",
       });
     }
@@ -241,7 +275,10 @@ export default function PortalAdmin() {
           </p>
         </div>
 
-        <div className="relative overflow-hidden rounded-2xl bg-primary p-6 text-primary-foreground shadow-lg md:p-8">
+        <div
+          className="relative overflow-hidden rounded-2xl p-6 text-white shadow-lg md:p-8"
+          style={{ backgroundColor: portalHeroColor }}
+        >
         <div className="absolute inset-0 z-0 opacity-10">
           <svg className="h-full w-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
@@ -365,7 +402,7 @@ export default function PortalAdmin() {
                     )} />
                     <DialogFooter>
                       <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-                      <Button type="submit" disabled={createDocument.isPending}>{createDocument.isPending ? "Publicando..." : "Publicar"}</Button>
+                      <Button type="submit">{editingDocumentId ? "Guardar cambios" : "Publicar"}</Button>
                     </DialogFooter>
                   </form>
                 </Form>
@@ -409,16 +446,15 @@ export default function PortalAdmin() {
               {documents.map((doc) => {
                 const isDownloadableFile = !!doc.url?.includes("/uploads/documents/");
                 return (
-                  <a
-                    key={doc.id}
-                    href={doc.url || "#"}
-                    target={doc.url && !isDownloadableFile ? "_blank" : undefined}
-                    rel={doc.url && !isDownloadableFile ? "noopener noreferrer" : undefined}
-                    download={isDownloadableFile ? doc.title : undefined}
-                    className="block group"
-                  >
-                    <Card className="h-full bg-white transition-all duration-200 hover:border-primary/50 hover:shadow-md dark:bg-slate-900">
-                      <CardContent className="flex gap-4 p-5">
+                  <Card key={doc.id} className="h-full bg-white transition-all duration-200 hover:border-primary/50 hover:shadow-md dark:bg-slate-900">
+                    <CardContent className="flex gap-4 p-5">
+                      <a
+                        href={doc.url || "#"}
+                        target={doc.url && !isDownloadableFile ? "_blank" : undefined}
+                        rel={doc.url && !isDownloadableFile ? "noopener noreferrer" : undefined}
+                        download={isDownloadableFile ? doc.title : undefined}
+                        className="flex min-w-0 flex-1 gap-4"
+                      >
                         <div className="shrink-0 rounded-lg bg-slate-50 p-3 transition-colors group-hover:bg-primary/5 dark:bg-slate-800">
                           {getIcon(doc.type)}
                         </div>
@@ -435,9 +471,19 @@ export default function PortalAdmin() {
                           </h3>
                           {doc.description && <p className="mt-1 line-clamp-2 text-sm text-slate-500">{doc.description}</p>}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </a>
+                      </a>
+                      {canManageContent && (
+                        <div className="flex shrink-0 flex-col gap-2">
+                          <Button type="button" variant="outline" size="icon" onClick={() => openEditDialog(doc)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" variant="outline" size="icon" onClick={() => deleteDocument(doc.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 );
               })}
             </div>

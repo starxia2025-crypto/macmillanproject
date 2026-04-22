@@ -1,36 +1,84 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { ticketsTable, usersTable, tenantsTable, auditLogsTable } from "@workspace/db/schema";
+import { ticketsTable, usersTable, tenantsTable, auditLogsTable, schoolsTable } from "@workspace/db/schema";
 import { eq, count, sql, and, gte, lte, desc } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth.js";
 import { parseDbJson } from "../lib/db-json.js";
 
 const router = Router();
 
-function buildTenantCondition(tenantId: number | null | undefined, authUser: any) {
+function jsonString(path: string) {
+  return sql<string>`NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(${ticketsTable.customFields}, ${path})), ''), 'null')`;
+}
+
+function parseDashboardFilters(req: any) {
+  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
+  const schoolId = req.query["schoolId"] ? Number(req.query["schoolId"]) : undefined;
+  const dateFrom = req.query["dateFrom"] as string | undefined;
+  const dateTo = req.query["dateTo"] as string | undefined;
+
+  return { tenantId, schoolId, dateFrom, dateTo };
+}
+
+function buildTicketConditions(
+  filters: { tenantId?: number; schoolId?: number; dateFrom?: string; dateTo?: string },
+  authUser: any,
+) {
+  const conditions: any[] = [];
+
   if (authUser.role !== "superadmin" && authUser.role !== "tecnico") {
-    return authUser.tenantId ? eq(ticketsTable.tenantId, authUser.tenantId) : undefined;
+    if (authUser.scopeType === "school" && authUser.schoolId) {
+      conditions.push(eq(ticketsTable.schoolId, authUser.schoolId));
+    } else if (authUser.tenantId) {
+      conditions.push(eq(ticketsTable.tenantId, authUser.tenantId));
+      if (filters.schoolId) conditions.push(eq(ticketsTable.schoolId, filters.schoolId));
+    }
+  } else {
+    if (filters.tenantId) conditions.push(eq(ticketsTable.tenantId, filters.tenantId));
+    if (filters.schoolId) conditions.push(eq(ticketsTable.schoolId, filters.schoolId));
   }
-  if (tenantId) return eq(ticketsTable.tenantId, tenantId);
-  return undefined;
+
+  if (filters.dateFrom) {
+    conditions.push(gte(ticketsTable.createdAt, new Date(filters.dateFrom)));
+  }
+
+  if (filters.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(lte(ticketsTable.createdAt, end));
+  }
+
+  return conditions;
+}
+
+function buildSchoolLabelExpression() {
+  const mochilaType = sql<string>`LOWER(COALESCE(${jsonString("$.mochilaLookup.records[0].type")}, ''))`;
+  const mochilaSchoolName = jsonString("$.mochilaLookup.records[0].schoolName");
+  const importedSchool = jsonString("$.importedSchool");
+  const school = jsonString("$.school");
+
+  return sql<string>`
+    COALESCE(
+      CASE
+        WHEN ${mochilaType} IN ('mochila', 'mochila_blink')
+        THEN ${mochilaSchoolName}
+        ELSE NULL
+      END,
+      ${importedSchool},
+      ${school},
+      ${schoolsTable.name},
+      ${tenantsTable.name},
+      'Sin colegio'
+    )
+  `;
 }
 
 router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
-  const dateFrom = req.query["dateFrom"] as string | undefined;
-  const dateTo = req.query["dateTo"] as string | undefined;
-
-  const conditions: any[] = [];
-  const tc = buildTenantCondition(tenantId, authUser);
-  if (tc) conditions.push(tc);
-  if (dateFrom) conditions.push(gte(ticketsTable.createdAt, new Date(dateFrom)));
-  if (dateTo) {
-    const end = new Date(dateTo);
-    end.setHours(23, 59, 59, 999);
-    conditions.push(lte(ticketsTable.createdAt, end));
-  }
+  const filters = parseDashboardFilters(req);
+  const conditions = buildTicketConditions(filters, authUser);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const schoolLabel = buildSchoolLabelExpression();
 
   const [
     totalResult,
@@ -41,7 +89,7 @@ router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "ma
     pendingResult,
     urgentResult,
     resolvedWithTimeResult,
-    tenantsResult,
+    schoolsResult,
     usersResult,
     techResult,
   ] = await Promise.all([
@@ -53,10 +101,16 @@ router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "ma
     db.select({ count: count() }).from(ticketsTable).where(and(where, eq(ticketsTable.status, "pendiente"))),
     db.select({ count: count() }).from(ticketsTable).where(and(where, eq(ticketsTable.priority, "urgente"))),
     db
-      .select({ avgHours: sql<number>`AVG(DATEDIFF(second, ${ticketsTable.createdAt}, ${ticketsTable.resolvedAt}) / 3600.0)` })
+      .select({ avgHours: sql<number>`AVG(TIMESTAMPDIFF(SECOND, ${ticketsTable.createdAt}, ${ticketsTable.resolvedAt}) / 3600.0)` })
       .from(ticketsTable)
       .where(and(where, sql`${ticketsTable.resolvedAt} IS NOT NULL`)),
-    db.select({ count: count() }).from(tenantsTable),
+    db
+      .select({ schoolName: schoolLabel })
+      .from(ticketsTable)
+      .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
+      .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id))
+      .where(where)
+      .groupBy(schoolLabel),
     db.select({ count: count() }).from(usersTable),
     db.select({ count: count() }).from(usersTable).where(eq(usersTable.role, "tecnico")),
   ]);
@@ -70,7 +124,7 @@ router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "ma
     pendingTickets: Number(pendingResult[0]?.count ?? 0),
     urgentTickets: Number(urgentResult[0]?.count ?? 0),
     avgResolutionHours: resolvedWithTimeResult[0]?.avgHours ?? null,
-    totalTenants: Number(tenantsResult[0]?.count ?? 0),
+    totalSchools: schoolsResult.length,
     totalUsers: Number(usersResult[0]?.count ?? 0),
     totalTechnicians: Number(techResult[0]?.count ?? 0),
   });
@@ -78,10 +132,8 @@ router.get("/stats", requireAuth, requireRole("superadmin", "admin_cliente", "ma
 
 router.get("/tickets-by-status", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
-
-  const tc = buildTenantCondition(tenantId, authUser);
-  const conditions = tc ? [tc] : [];
+  const filters = parseDashboardFilters(req);
+  const conditions = buildTicketConditions(filters, authUser);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const result = await db.select({ status: ticketsTable.status, count: count() }).from(ticketsTable).where(where).groupBy(ticketsTable.status);
@@ -101,10 +153,8 @@ router.get("/tickets-by-status", requireAuth, requireRole("superadmin", "admin_c
 
 router.get("/tickets-by-priority", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
-
-  const tc = buildTenantCondition(tenantId, authUser);
-  const conditions = tc ? [tc] : [];
+  const filters = parseDashboardFilters(req);
+  const conditions = buildTicketConditions(filters, authUser);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const result = await db.select({ priority: ticketsTable.priority, count: count() }).from(ticketsTable).where(where).groupBy(ticketsTable.priority);
@@ -121,32 +171,22 @@ router.get("/tickets-by-priority", requireAuth, requireRole("superadmin", "admin
 
 router.get("/tickets-over-time", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
+  const filters = parseDashboardFilters(req);
   const period = (req.query["period"] as string) || "month";
-  const dateFrom = req.query["dateFrom"] as string | undefined;
-  const dateTo = req.query["dateTo"] as string | undefined;
-
-  const tc = buildTenantCondition(tenantId, authUser);
-  const conditions: any[] = tc ? [tc] : [];
-  if (dateFrom) conditions.push(gte(ticketsTable.createdAt, new Date(dateFrom)));
-  if (dateTo) {
-    const end = new Date(dateTo);
-    end.setHours(23, 59, 59, 999);
-    conditions.push(lte(ticketsTable.createdAt, end));
-  }
+  const conditions = buildTicketConditions(filters, authUser);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const bucket = period === "day"
-    ? sql<string>`CONVERT(varchar(10), ${ticketsTable.createdAt}, 23)`
+    ? sql<string>`DATE_FORMAT(${ticketsTable.createdAt}, '%Y-%m-%d')`
     : period === "week"
-      ? sql<string>`CONCAT(DATEPART(year, ${ticketsTable.createdAt}), '-W', RIGHT(CONCAT('0', DATEPART(iso_week, ${ticketsTable.createdAt})), 2))`
-      : sql<string>`CONCAT(DATEPART(year, ${ticketsTable.createdAt}), '-', RIGHT(CONCAT('0', DATEPART(month, ${ticketsTable.createdAt})), 2))`;
+      ? sql<string>`DATE_FORMAT(${ticketsTable.createdAt}, '%x-W%v')`
+      : sql<string>`DATE_FORMAT(${ticketsTable.createdAt}, '%Y-%m')`;
 
   const resolvedBucket = period === "day"
-    ? sql<string>`CONVERT(varchar(10), ${ticketsTable.resolvedAt}, 23)`
+    ? sql<string>`DATE_FORMAT(${ticketsTable.resolvedAt}, '%Y-%m-%d')`
     : period === "week"
-      ? sql<string>`CONCAT(DATEPART(year, ${ticketsTable.resolvedAt}), '-W', RIGHT(CONCAT('0', DATEPART(iso_week, ${ticketsTable.resolvedAt})), 2))`
-      : sql<string>`CONCAT(DATEPART(year, ${ticketsTable.resolvedAt}), '-', RIGHT(CONCAT('0', DATEPART(month, ${ticketsTable.resolvedAt})), 2))`;
+      ? sql<string>`DATE_FORMAT(${ticketsTable.resolvedAt}, '%x-W%v')`
+      : sql<string>`DATE_FORMAT(${ticketsTable.resolvedAt}, '%Y-%m')`;
 
   const created = await db
     .select({ date: bucket, count: count() })
@@ -169,10 +209,8 @@ router.get("/tickets-over-time", requireAuth, requireRole("superadmin", "admin_c
 
 router.get("/tickets-by-technician", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
-
-  const tc = buildTenantCondition(tenantId, authUser);
-  const conditions: any[] = tc ? [tc] : [];
+  const filters = parseDashboardFilters(req);
+  const conditions = buildTicketConditions(filters, authUser);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const result = await db
@@ -193,14 +231,22 @@ router.get("/tickets-by-technician", requireAuth, requireRole("superadmin", "adm
 
 router.get("/recent-activity", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
+  const filters = parseDashboardFilters(req);
   const limit = Math.min(50, Math.max(1, Number(req.query["limit"]) || 10));
 
   const conditions: any[] = [];
   if (authUser.role !== "superadmin" && authUser.role !== "tecnico") {
     if (authUser.tenantId) conditions.push(eq(auditLogsTable.tenantId, authUser.tenantId));
-  } else if (tenantId) {
-    conditions.push(eq(auditLogsTable.tenantId, tenantId));
+  } else if (filters.tenantId) {
+    conditions.push(eq(auditLogsTable.tenantId, filters.tenantId));
+  }
+  if (filters.dateFrom) {
+    conditions.push(gte(auditLogsTable.createdAt, new Date(filters.dateFrom)));
+  }
+  if (filters.dateTo) {
+    const end = new Date(filters.dateTo);
+    end.setHours(23, 59, 59, 999);
+    conditions.push(lte(auditLogsTable.createdAt, end));
   }
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -241,11 +287,10 @@ router.get("/recent-activity", requireAuth, requireRole("superadmin", "admin_cli
 
 router.get("/top-categories", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
   const authUser = (req as any).user;
-  const tenantId = req.query["tenantId"] ? Number(req.query["tenantId"]) : undefined;
+  const filters = parseDashboardFilters(req);
   const limit = Math.min(20, Math.max(1, Number(req.query["limit"]) || 5));
 
-  const tc = buildTenantCondition(tenantId, authUser);
-  const conditions: any[] = tc ? [tc] : [];
+  const conditions = buildTicketConditions(filters, authUser);
   conditions.push(sql`${ticketsTable.category} IS NOT NULL`);
   const where = and(...conditions);
 
@@ -258,6 +303,133 @@ router.get("/top-categories", requireAuth, requireRole("superadmin", "admin_clie
     .limit(limit);
 
   res.json(result.map((r) => ({ category: r.category ?? "", count: Number(r.count) })));
+});
+
+router.get("/tickets-by-school", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const filters = parseDashboardFilters(req);
+
+  const conditions = buildTicketConditions(filters, authUser);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const schoolLabel = buildSchoolLabelExpression();
+  const query = db
+    .select({
+      schoolName: schoolLabel,
+      count: count(),
+    })
+    .from(ticketsTable)
+    .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
+    .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id));
+
+  const result = where
+    ? await query.where(where).groupBy(schoolLabel).orderBy(desc(count())).limit(10)
+    : await query.groupBy(schoolLabel).orderBy(desc(count())).limit(10);
+
+  res.json(result.map((item) => ({ schoolName: item.schoolName, count: Number(item.count) })));
+});
+
+router.get("/tickets-by-inquiry-type", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const filters = parseDashboardFilters(req);
+
+  const conditions = buildTicketConditions(filters, authUser);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const inquiryType = sql<string>`COALESCE(${jsonString("$.inquiryType")}, NULLIF(${ticketsTable.category}, ''), 'Sin tipo')`;
+  const query = db
+    .select({
+      inquiryType,
+      count: count(),
+    })
+    .from(ticketsTable);
+
+  const result = where
+    ? await query.where(where).groupBy(inquiryType).orderBy(desc(count())).limit(8)
+    : await query.groupBy(inquiryType).orderBy(desc(count())).limit(8);
+
+  res.json(result.map((item) => ({ inquiryType: item.inquiryType, count: Number(item.count) })));
+});
+
+router.get("/tickets-by-stage", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const filters = parseDashboardFilters(req);
+
+  const conditions = buildTicketConditions(filters, authUser);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const stage = sql<string>`COALESCE(${jsonString("$.stage")}, 'Sin etapa')`;
+  const query = db
+    .select({
+      stage,
+      count: count(),
+    })
+    .from(ticketsTable);
+
+  const result = where
+    ? await query.where(where).groupBy(stage).orderBy(desc(count())).limit(8)
+    : await query.groupBy(stage).orderBy(desc(count())).limit(8);
+
+  res.json(result.map((item) => ({ stage: item.stage, count: Number(item.count) })));
+});
+
+router.get("/tickets-by-school-and-reporter", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const filters = parseDashboardFilters(req);
+
+  const conditions = buildTicketConditions(filters, authUser);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const schoolName = buildSchoolLabelExpression();
+  const reporterName = sql<string>`COALESCE(${jsonString("$.createdByName")}, ${jsonString("$.reporterEmail")}, ${usersTable.name}, 'Sin informador')`;
+  const label = sql<string>`CONCAT(${schoolName}, ' - ', ${reporterName})`;
+  const query = db
+    .select({
+      schoolName,
+      reporterName,
+      label,
+      count: count(),
+    })
+    .from(ticketsTable)
+    .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
+    .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id))
+    .leftJoin(usersTable, eq(ticketsTable.createdById, usersTable.id));
+
+  const result = where
+    ? await query.where(where).groupBy(schoolName, reporterName, label).orderBy(desc(count())).limit(10)
+    : await query.groupBy(schoolName, reporterName, label).orderBy(desc(count())).limit(10);
+
+  res.json(result.map((item) => ({
+    schoolName: item.schoolName,
+    reporterName: item.reporterName,
+    label: item.label,
+    count: Number(item.count),
+  })));
+});
+
+router.get("/resolution-by-school", requireAuth, requireRole("superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"), async (req, res) => {
+  const authUser = (req as any).user;
+  const filters = parseDashboardFilters(req);
+
+  const conditions = buildTicketConditions(filters, authUser);
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const schoolName = buildSchoolLabelExpression();
+  const resolvedCondition = sql`${ticketsTable.resolvedAt} IS NOT NULL`;
+  const query = db
+    .select({
+      schoolName,
+      avgHours: sql<number>`AVG(TIMESTAMPDIFF(SECOND, ${ticketsTable.createdAt}, ${ticketsTable.resolvedAt}) / 3600.0)`,
+      count: count(),
+    })
+    .from(ticketsTable)
+    .leftJoin(schoolsTable, eq(ticketsTable.schoolId, schoolsTable.id))
+    .leftJoin(tenantsTable, eq(ticketsTable.tenantId, tenantsTable.id));
+
+  const result = where
+    ? await query.where(and(where, resolvedCondition)).groupBy(schoolName).orderBy(desc(count())).limit(8)
+    : await query.where(resolvedCondition).groupBy(schoolName).orderBy(desc(count())).limit(8);
+
+  res.json(result.map((item) => ({
+    schoolName: item.schoolName,
+    avgHours: item.avgHours ? Number(item.avgHours) : 0,
+    count: Number(item.count),
+  })));
 });
 
 export default router;

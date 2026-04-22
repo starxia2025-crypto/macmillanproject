@@ -6,6 +6,7 @@ import { es } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { StatusBadge, PriorityBadge } from "@/components/badges";
@@ -19,15 +20,18 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { Search, Plus, Filter, MessageSquare, Clock, CheckCircle2, Inbox, UserRoundCheck, Eye, ArrowRight, Upload } from "lucide-react";
+import { buildApiUrl } from "@/lib/api-base-url";
+import { Search, Plus, Filter, MessageSquare, Clock, CheckCircle2, Inbox, UserRoundCheck, Eye, ArrowRight, Upload, Loader2, FileSpreadsheet } from "lucide-react";
 
 const openStatuses = ["nuevo", "pendiente", "en_revision", "en_proceso", "esperando_cliente"];
 const bulkImportHeaders = [
+  "red_educativa",
   "colegio",
   "email_informador",
   "tipo_sujeto",
   "email_afectado",
   "prioridad",
+  "estado",
   "tipo_consulta",
   "descripcion",
   "pedido",
@@ -39,6 +43,7 @@ const bulkImportHeaders = [
 ] as const;
 const bulkSubjectOptions = ["alumno", "docente", "sobre_mi_cuenta"] as const;
 const bulkPriorityOptions = ["baja", "media", "alta", "urgente"] as const;
+const bulkStatusOptions = ["nuevo", "pendiente", "en_revision", "en_proceso", "esperando_cliente", "resuelto", "cerrado"] as const;
 const bulkInquiryOptions = [
   "Alumno sin libros",
   "No puede acceder",
@@ -47,11 +52,213 @@ const bulkInquiryOptions = [
   "Otro",
 ] as const;
 
+type BulkImportRow = Record<(typeof bulkImportHeaders)[number], string>;
+type BulkImportPhase = "idle" | "reading" | "uploading" | "finalizing";
+
+const importPhaseMeta: Record<BulkImportPhase, { value: number; label: string; helper: string }> = {
+  idle: { value: 0, label: "", helper: "" },
+  reading: {
+    value: 28,
+    label: "Leyendo el Excel",
+    helper: "Estamos validando columnas y preparando las filas para importarlas.",
+  },
+  uploading: {
+    value: 72,
+    label: "Creando consultas",
+    helper: "Estamos enviando el fichero al servidor y generando los tickets.",
+  },
+  finalizing: {
+    value: 96,
+    label: "Actualizando la bandeja",
+    helper: "Cerrando la importación y refrescando la lista de consultas.",
+  },
+};
+
+function fixMojibake(value: string) {
+  let next = value;
+
+  if (/[ÃÂâ]/.test(next)) {
+    try {
+      next = new TextDecoder("utf-8", { fatal: false }).decode(Uint8Array.from(next, (char) => char.charCodeAt(0) & 0xff)) || next;
+    } catch {
+      next = value;
+    }
+  }
+
+  const replacements: Array<[RegExp, string]> = [
+    [/activaci\?n/gi, "activación"],
+    [/informaci\?n/gi, "información"],
+    [/resoluci\?n/gi, "resolución"],
+    [/educaci\?n/gi, "educación"],
+    [/aplicaci\?n/gi, "aplicación"],
+    [/descripci\?n/gi, "descripción"],
+    [/asignaci\?n/gi, "asignación"],
+    [/gesti\?n/gi, "gestión"],
+    [/sesi\?n/gi, "sesión"],
+    [/versi\?n/gi, "versión"],
+    [/revisi\?n/gi, "revisión"],
+    [/categori\?a/gi, "categoría"],
+    [/contrase\?a/gi, "contraseña"],
+    [/espa\?ol/gi, "español"],
+    [/atenci\?n/gi, "atención"],
+    [/soluci\?n/gi, "solución"],
+    [/Inténtalo/gi, "Inténtalo"],
+    [/Descripción/gi, "Descripción"],
+    [/Categoría/gi, "Categoría"],
+    [/categoría/gi, "categoría"],
+    [/Revisión/gi, "Revisión"],
+    [/revisión/gi, "revisión"],
+    [/devolución/gi, "devolución"],
+    [/verán/gi, "verán"],
+    [/Ã¡/g, "á"],
+    [/Ã©/g, "é"],
+    [/Ã­/g, "í"],
+    [/Ã³/g, "ó"],
+    [/Ãº/g, "ú"],
+    [/Ã±/g, "ñ"],
+    [/Âº/g, "º"],
+    [/Â·/g, "·"],
+  ];
+
+  return replacements.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), next);
+}
+
+function safeDisplayText(value: unknown): string {
+  return fixMojibake(String(value ?? ""));
+}
+
+function normalizeBulkCellValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "object" && value && "text" in (value as Record<string, unknown>)) {
+    return fixMojibake(String((value as Record<string, unknown>).text ?? "").trim());
+  }
+
+  return fixMojibake(String(value).trim());
+}
+
+async function parseBulkImportWorkbook(file: File): Promise<BulkImportRow[]> {
+  const excelModule = await import("exceljs");
+  const ExcelJS = excelModule.default ?? excelModule;
+  const workbook = new ExcelJS.Workbook();
+  const buffer = await file.arrayBuffer();
+  await workbook.xlsx.load(buffer);
+
+  const worksheet = workbook.getWorksheet("Consultas") ?? workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error("El archivo no contiene ninguna hoja valida.");
+  }
+
+  const headerMap = new Map<string, number>();
+  worksheet.getRow(1).eachCell((cell, colNumber) => {
+    const key = normalizeBulkCellValue(cell.value).toLowerCase();
+    if (key) headerMap.set(key, colNumber);
+  });
+
+  const missingHeaders = bulkImportHeaders.filter((header) => !headerMap.has(header.toLowerCase()));
+  if (missingHeaders.length > 0) {
+    throw new Error(`Faltan columnas obligatorias en el Excel: ${missingHeaders.join(", ")}.`);
+  }
+
+  const rows: BulkImportRow[] = [];
+  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber += 1) {
+    const row = worksheet.getRow(rowNumber);
+    const values = Object.fromEntries(
+      bulkImportHeaders.map((header) => {
+        const index = headerMap.get(header.toLowerCase())!;
+        return [header, normalizeBulkCellValue(row.getCell(index).value)];
+      }),
+    ) as BulkImportRow;
+
+    if (Object.values(values).some(Boolean)) {
+      rows.push(values);
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error("El Excel no contiene filas de datos para importar.");
+  }
+
+  return rows;
+}
+
 function getTicketSubtitle(ticket: any) {
-  const school = String(ticket.schoolName || ticket.customFields?.school || ticket.category || ticket.tenantName || "Colegio");
-  const inquiryType = String(ticket.customFields?.inquiryType || ticket.customFields?.subjectType || "Consulta general");
-  const studentEmail = ticket.customFields?.studentEmail ? String(ticket.customFields.studentEmail) : null;
+  const school = safeDisplayText(ticket.schoolName || ticket.customFields?.school || ticket.category || ticket.tenantName || "Colegio");
+  const inquiryType = safeDisplayText(ticket.customFields?.inquiryType || ticket.customFields?.subjectType || "Consulta general");
+  const studentEmail = ticket.customFields?.studentEmail ? safeDisplayText(ticket.customFields.studentEmail) : null;
   return { school, inquiryType, studentEmail };
+}
+
+function normalizeTicketText(value: unknown) {
+  return safeDisplayText(value).trim().toLowerCase();
+}
+
+function isChangeEmailTicket(ticket: any) {
+  return (
+    normalizeTicketText(ticket.title) === "modificar correo" ||
+    normalizeTicketText(ticket.category) === "modificar_correo" ||
+    normalizeTicketText(ticket.customFields?.inquiryType) === "modificar correo" ||
+    ticket.customFields?.changeEmailRequested === true
+  );
+}
+
+function isReturnTicket(ticket: any) {
+  const lineActions = Array.isArray(ticket.customFields?.lineActions) ? ticket.customFields.lineActions : [];
+  return (
+    normalizeTicketText(ticket.title) === "devolucion" ||
+    normalizeTicketText(ticket.category) === "devolucion" ||
+    normalizeTicketText(ticket.customFields?.inquiryType) === "devolucion" ||
+    ticket.customFields?.returnRequested === true ||
+    lineActions.some((item: any) => Array.isArray(item?.actions) && item.actions.includes("return"))
+  );
+}
+
+async function openMeeUserManagerForTicket(ticket: any) {
+  const email = safeDisplayText(
+    ticket.customFields?.currentStudentEmail ??
+      ticket.customFields?.studentEmail ??
+      ticket.customFields?.affectedEmail ??
+      ""
+  )
+    .trim()
+    .toLowerCase();
+  const meeAdminUrl = "https://mee-admin.springernature.com/console";
+
+  if (!email) {
+    throw new Error("Este ticket no tiene un email de alumno disponible.");
+  }
+
+  if (window.desktopBridge?.openMeeUserManager) {
+    await window.desktopBridge.openMeeUserManager(email);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(email);
+  } catch {
+    // Si el navegador bloquea el portapapeles, al menos abrimos la URL.
+  }
+
+  window.open(meeAdminUrl, "_blank", "noopener,noreferrer");
+}
+
+async function sendResolvedTicketEmailForDesktop(ticket: any, resolverName?: string | null) {
+  if (!window.desktopBridge?.sendResolvedTicketEmail) {
+    return;
+  }
+
+  await window.desktopBridge.sendResolvedTicketEmail({
+    ticketNumber: safeDisplayText(ticket.ticketNumber),
+    title: safeDisplayText(ticket.title),
+    description: safeDisplayText(ticket.description),
+    status: "resuelto",
+    priority: safeDisplayText(ticket.priority),
+    creatorName: safeDisplayText(ticket.createdByName),
+    creatorEmail: safeDisplayText(ticket.customFields?.reporterEmail ?? ""),
+    schoolName: safeDisplayText(ticket.schoolName),
+    tenantName: safeDisplayText(ticket.tenantName),
+    resolvedByName: safeDisplayText(resolverName ?? ""),
+    resolvedAt: new Date().toLocaleString("es-ES"),
+  });
 }
 
 function buildBulkImportTemplateRow(user: { email?: string | null; schoolName?: string | null; tenantName?: string | null } | undefined) {
@@ -59,11 +266,13 @@ function buildBulkImportTemplateRow(user: { email?: string | null; schoolName?: 
   const reporterEmail = user?.email || "informador@colegio.es";
 
   return [
+    user?.tenantName || "Red educativa",
     school,
     reporterEmail,
     "alumno",
     "alumno@centro.es",
     "media",
+    "nuevo",
     "No puede acceder",
     "El alumno no puede entrar en la plataforma desde hoy.",
     "10125633",
@@ -93,7 +302,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
   headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
   headerRow.alignment = { vertical: "middle", horizontal: "center" };
 
-  const widths = [22, 30, 18, 28, 14, 26, 42, 14, 14, 16, 12, 16, 28];
+  const widths = [22, 24, 30, 18, 28, 14, 18, 26, 42, 14, 14, 16, 12, 16, 28];
   widths.forEach((width, index) => {
     worksheet.getColumn(index + 1).width = width;
   });
@@ -109,7 +318,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
   });
 
   for (let row = 2; row <= 200; row += 1) {
-    worksheet.getCell(`C${row}`).dataValidation = {
+    worksheet.getCell(`D${row}`).dataValidation = {
       type: "list",
       allowBlank: false,
       formulae: [`"${bulkSubjectOptions.join(",")}"`],
@@ -117,7 +326,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       errorTitle: "Valor no válido",
       error: "Selecciona uno de los valores permitidos para tipo_sujeto.",
     };
-    worksheet.getCell(`E${row}`).dataValidation = {
+    worksheet.getCell(`F${row}`).dataValidation = {
       type: "list",
       allowBlank: false,
       formulae: [`"${bulkPriorityOptions.join(",")}"`],
@@ -125,7 +334,15 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       errorTitle: "Valor no válido",
       error: "Selecciona una prioridad permitida.",
     };
-    worksheet.getCell(`F${row}`).dataValidation = {
+    worksheet.getCell(`G${row}`).dataValidation = {
+      type: "list",
+      allowBlank: false,
+      formulae: [`"${bulkStatusOptions.join(",")}"`],
+      showErrorMessage: true,
+      errorTitle: "Valor no válido",
+      error: "Selecciona uno de los estados permitidos.",
+    };
+    worksheet.getCell(`H${row}`).dataValidation = {
       type: "list",
       allowBlank: false,
       formulae: [`"${bulkInquiryOptions.join(",")}"`],
@@ -138,8 +355,11 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
   const helpSheet = workbook.addWorksheet("Ayuda");
   helpSheet.addRows([
     ["Campo", "Qué debe contener"],
+    ["red_educativa", "Red educativa destino en el sistema. Ejemplo: Edelvives."],
+    ["colegio", "Nombre visible del colegio para el ticket y las estadísticas. No crea colegios nuevos en el sistema."],
     ["tipo_sujeto", "alumno, docente o sobre_mi_cuenta"],
     ["prioridad", "baja, media, alta o urgente"],
+    ["estado", "nuevo, pendiente, en_revision, en_proceso, esperando_cliente, resuelto o cerrado"],
     ["tipo_consulta", bulkInquiryOptions.join(" | ")],
     ["pedido", "Opcional. Solo si la incidencia viene de Mochilas o pedidos."],
   ]);
@@ -176,6 +396,32 @@ function SupportTicketCard({
   const { school, inquiryType, studentEmail } = getTicketSubtitle(ticket);
   const isMine = ticket.assignedToId === currentUserId;
   const occupiedByOther = !!ticket.assignedToId && ticket.assignedToId !== currentUserId;
+  const contextualActionLabel = isChangeEmailTicket(ticket)
+    ? "Cambiar correo"
+    : isReturnTicket(ticket)
+      ? "Cancelar token"
+      : null;
+
+  const handleContextualAction = () => {
+    if (isChangeEmailTicket(ticket)) {
+      void openMeeUserManagerForTicket(ticket).catch((error) => {
+        toast({
+          title: "No se pudo abrir MEE Admin",
+          description: error instanceof Error ? error.message : "Intentalo de nuevo.",
+          variant: "destructive",
+        });
+      });
+      if (!window.desktopBridge?.openMeeUserManager) {
+        toast({
+          title: "MEE Admin abierto",
+          description: "Se ha abierto la web corporativa en una nueva pestaña y se ha intentado copiar el email del alumno.",
+        });
+      }
+      return;
+    }
+
+    setLocation(`/tickets/${ticket.id}`);
+  };
 
   return (
     <Card className="overflow-hidden border-slate-200 shadow-sm transition hover:shadow-md">
@@ -191,7 +437,7 @@ function SupportTicketCard({
             </div>
 
             <div>
-              <h3 className="line-clamp-2 text-lg font-semibold text-slate-900">{ticket.title}</h3>
+              <h3 className="line-clamp-2 text-lg font-semibold text-slate-900">{safeDisplayText(ticket.title)}</h3>
               <p className="mt-1 text-sm text-slate-500">{school} Â· {inquiryType}</p>
             </div>
 
@@ -212,7 +458,7 @@ function SupportTicketCard({
           </div>
 
           <div className="flex shrink-0 flex-col gap-2 lg:w-[190px]">
-            {!ticket.assignedToId && (
+            {!ticket.assignedToId && openStatuses.includes(ticket.status) && (
               <Button className="gap-2" onClick={() => onTake(ticket.id)}>
                 <UserRoundCheck className="h-4 w-4" />
                 Tomar ticket
@@ -222,6 +468,11 @@ function SupportTicketCard({
               <Button variant="secondary" className="gap-2" onClick={() => onResolve(ticket.id)}>
                 <CheckCircle2 className="h-4 w-4" />
                 Marcar resuelto
+              </Button>
+            )}
+            {isMine && ticket.status !== "resuelto" && ticket.status !== "cerrado" && contextualActionLabel && (
+              <Button variant="outline" className="gap-2" onClick={handleContextualAction}>
+                {contextualActionLabel}
               </Button>
             )}
             {busy && occupiedByOther && (
@@ -250,8 +501,12 @@ export default function Tickets() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [activeSupportTab, setActiveSupportTab] = useState("queue");
+  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importPhase, setImportPhase] = useState<BulkImportPhase>("idle");
 
   const isSupportTech = user?.role === "tecnico";
+  const canBulkImport = ["superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"].includes(user?.role || "");
   const showSchoolColumn = user?.scopeType === "tenant" || user?.scopeType === "global" || user?.role === "superadmin" || user?.role === "tecnico";
 
   const { data: ticketsData, isLoading, refetch } = useListTickets({
@@ -312,8 +567,69 @@ export default function Tickets() {
     changeStatus.mutate({ ticketId, data: { status: TicketStatus.en_proceso } });
   }
 
-  function handleResolveTicket(ticketId: number) {
-    changeStatus.mutate({ ticketId, data: { status: TicketStatus.resuelto } });
+  async function handleResolveTicket(ticketId: number) {
+    const ticket = filteredSupportTickets.find((item) => item.id === ticketId);
+    await changeStatus.mutateAsync({ ticketId, data: { status: TicketStatus.resuelto } });
+
+    if (!ticket) {
+      return;
+    }
+
+    try {
+      await sendResolvedTicketEmailForDesktop(ticket, user?.name);
+    } catch (error) {
+      toast({
+        title: "Ticket resuelto, pero no se pudo enviar el correo",
+        description: error instanceof Error ? error.message : "Revisa Outlook en este equipo.",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleImportFile() {
+    if (!selectedImportFile) {
+      toast({
+        title: "Selecciona un archivo",
+        description: "Elige primero el Excel que quieres importar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsImporting(true);
+    setImportPhase("reading");
+    try {
+      const rows = await parseBulkImportWorkbook(selectedImportFile);
+      setImportPhase("uploading");
+      const response = await fetch(buildApiUrl("/api/tickets/import"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ rows }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.message || "No se pudo importar el fichero.");
+      }
+
+      setImportPhase("finalizing");
+      toast({
+        title: "Importación completada",
+        description: `Se han creado ${payload?.createdCount ?? 0} consultas${payload?.warnings?.length ? ` y ${payload.warnings.length} filas necesitaron ajuste` : ""}.`,
+      });
+      setSelectedImportFile(null);
+      await refetch();
+    } catch (error) {
+      toast({
+        title: "No se pudo importar el Excel",
+        description: error instanceof Error ? error.message : "Revisa el archivo e inténtalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+      setImportPhase("idle");
+    }
   }
 
   if (isSupportTech) {
@@ -476,6 +792,8 @@ export default function Tickets() {
     );
   }
 
+  const currentImportPhase = importPhaseMeta[importPhase];
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -485,78 +803,122 @@ export default function Tickets() {
         </div>
         {user?.role !== undefined && (
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2">
-                  <Upload className="h-4 w-4" />
-                  Importación masiva
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-xl">
-                <DialogHeader>
-                  <DialogTitle>Importación masiva de consultas</DialogTitle>
-                  <DialogDescription>
-                    Descarga una plantilla Excel ya preparada con una fila de ejemplo y listas desplegables en las columnas que solo admiten ciertos valores.
-                  </DialogDescription>
-                </DialogHeader>
+            {canBulkImport && (
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <Upload className="h-4 w-4" />
+                    Importación masiva
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-xl">
+                  <DialogHeader>
+                    <DialogTitle>Importación masiva de consultas</DialogTitle>
+                    <DialogDescription>
+                      Descarga la plantilla, completa una fila por consulta y súbela aquí cuando la tengas lista.
+                    </DialogDescription>
+                  </DialogHeader>
 
-                <div className="space-y-4 text-sm text-slate-600">
-                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                    <p className="font-medium text-slate-900">Qué contiene la plantilla</p>
-                    <ul className="mt-2 space-y-1 text-slate-600">
-                      <li>Una fila de ejemplo ya rellena.</li>
-                      <li>Los nombres de columna que debe respetar el archivo.</li>
-                      <li>Desplegables en `tipo_sujeto`, `prioridad` y `tipo_consulta`.</li>
-                    </ul>
+                  <div className="space-y-4 text-sm text-slate-600">
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                      <p className="font-medium text-slate-900">La plantilla incluye</p>
+                      <p className="mt-2 text-slate-600">
+                        Una fila de ejemplo y listas desplegables en <span className="font-medium">tipo_sujeto</span>, <span className="font-medium">prioridad</span>, <span className="font-medium">estado</span> y <span className="font-medium">tipo_consulta</span>.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <p className="font-medium text-slate-900">Valores clave</p>
+                        <ul className="mt-2 space-y-1 text-slate-600">
+                          <li><span className="font-medium">tipo_sujeto</span>: alumno, docente, sobre_mi_cuenta</li>
+                          <li><span className="font-medium">prioridad</span>: baja, media, alta, urgente</li>
+                          <li><span className="font-medium">estado</span>: nuevo, pendiente, resuelto...</li>
+                        </ul>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 p-4">
+                        <p className="font-medium text-slate-900">Importante</p>
+                        <ul className="mt-2 space-y-1 text-slate-600">
+                          <li>Una fila por consulta.</li>
+                          <li>No cambies los encabezados.</li>
+                          <li>Sube el archivo en formato <span className="font-medium">.xlsx</span>.</li>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="font-medium text-slate-900">Subir fichero</p>
+                      <div className="mt-3 space-y-3">
+                        <Input
+                          type="file"
+                          accept=".xlsx"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            setSelectedImportFile(file);
+                          }}
+                        />
+                        <p className="text-xs text-slate-500">
+                          {selectedImportFile
+                            ? `Archivo seleccionado: ${selectedImportFile.name}`
+                            : "Selecciona el Excel ya preparado para crear las consultas en lote."}
+                        </p>
+                        {isImporting && (
+                          <div className="rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-50 via-white to-violet-50 p-4 shadow-sm">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-600">
+                                {importPhase === "reading" ? (
+                                  <FileSpreadsheet className="h-5 w-5" />
+                                ) : importPhase === "uploading" ? (
+                                  <Upload className="h-5 w-5" />
+                                ) : (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-semibold text-slate-900">{currentImportPhase.label}</p>
+                                  <span className="text-xs font-medium text-slate-500">{currentImportPhase.value}%</span>
+                                </div>
+                                <p className="mt-1 text-xs text-slate-500">{currentImportPhase.helper}</p>
+                              </div>
+                            </div>
+                            <Progress value={currentImportPhase.value} className="mt-4 h-2.5 bg-indigo-100 [&>div]:bg-gradient-to-r [&>div]:from-indigo-500 [&>div]:to-violet-500" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 p-4">
-                    <p className="font-medium text-slate-900">Qué significan los campos más importantes</p>
-                    <ul className="mt-2 space-y-2 text-slate-600">
-                      <li><span className="font-medium text-slate-900">tipo_sujeto</span>: quién sufre la incidencia. Usa <span className="font-medium">alumno</span>, <span className="font-medium">docente</span> o <span className="font-medium">sobre_mi_cuenta</span>.</li>
-                      <li><span className="font-medium text-slate-900">tipo_consulta</span>: motivo principal. Ejemplos: <span className="font-medium">No puede acceder</span>, <span className="font-medium">Alumno sin libros</span>, <span className="font-medium">Problemas de activación</span>, <span className="font-medium">No funciona el libro</span>.</li>
-                      <li><span className="font-medium text-slate-900">prioridad</span>: <span className="font-medium">baja</span>, <span className="font-medium">media</span>, <span className="font-medium">alta</span> o <span className="font-medium">urgente</span>.</li>
-                    </ul>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 p-4">
-                    <p className="font-medium text-slate-900">Antes de cargarlo</p>
-                    <p className="mt-2 text-slate-600">
-                      Usa una fila por consulta y no cambies los nombres de las columnas. La plantilla ya sale en `.xlsx` para que sea más fácil rellenarla.
-                    </p>
-                  </div>
-                </div>
-
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      void downloadBulkTemplate(user).catch(() => {
-                        toast({
-                          title: "No se pudo generar la plantilla",
-                          description: "Falta preparar la dependencia de Excel. Ejecuta pnpm install y vuelve a intentarlo.",
-                          variant: "destructive",
+                  <DialogFooter>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        void downloadBulkTemplate(user).catch(() => {
+                          toast({
+                            title: "No se pudo generar la plantilla",
+                            description: "Falta preparar la dependencia de Excel. Ejecuta pnpm install y vuelve a intentarlo.",
+                            variant: "destructive",
+                          });
                         });
-                      });
-                    }}
-                  >
-                    Descargar plantilla Excel
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={() =>
-                      toast({
-                        title: "Carga masiva preparada",
-                        description: "La plantilla ya está lista. En el siguiente paso conectaremos la subida real del fichero.",
-                      })
-                    }
-                  >
-                    Entendido
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                      }}
+                    >
+                      Descargar plantilla Excel
+                    </Button>
+                    <Button type="button" onClick={() => void handleImportFile()} disabled={!selectedImportFile || isImporting} className="gap-2">
+                      {isImporting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Importando...
+                        </>
+                      ) : (
+                        "Importar Excel"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
 
             <Button onClick={() => setLocation("/tickets/new")} className="gap-2">
               <Plus className="h-4 w-4" />
@@ -641,7 +1003,7 @@ export default function Tickets() {
                   <TableRow key={ticket.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors" onClick={() => setLocation(`/tickets/${ticket.id}`)}>
                     <TableCell className="font-mono text-xs font-medium text-slate-500">#{ticket.ticketNumber}</TableCell>
                     <TableCell>
-                      <div className="font-medium text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">{ticket.title}</div>
+                      <div className="font-medium text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">{safeDisplayText(ticket.title)}</div>
                       <div className="text-xs text-slate-500 flex items-center gap-2">
                         <span className="truncate max-w-[200px]">{school}</span>
                         <span>Â·</span>
