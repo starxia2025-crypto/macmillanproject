@@ -18,7 +18,7 @@ export const tenantsTable = helpdeskTable("SOP_tenants", {
   hasMochilasAccess: boolColumn("has_mochilas_access", false),
   hasOrderLookup: boolColumn("has_order_lookup", false),
   hasReturnsAccess: boolColumn("has_returns_access", false),
-  quickLinks: jsonTextColumn<Array<{ label: string; url: string; icon: string }>>("quick_links", "[]"),
+  quickLinks: jsonTextColumn<Array<{ label: string; url: string; icon: string }>>("quick_links"),
   contactEmail: varchar("contact_email", { length: 255 }),
   supportEmail: varchar("support_email", { length: 255 }),
   createdAt: createdAtColumn(),
