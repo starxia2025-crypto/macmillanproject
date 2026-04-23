@@ -53,3 +53,7 @@ Thumbs.db
 .env
 .env.*
 !.env.local.example
+
+# Local runtime and archives
+.storage/
+Helpdesk-Saas.rar

@@ -1,74 +1,68 @@
 # Soporte Macmillan
 
-Esta iteración adapta el proyecto a un escenario real de soporte educativo para Macmillan.
+Esta iteracion adapta el proyecto a un escenario real de soporte educativo para Macmillan.
 
 ## Cambios implementados
 
 - Rebranding principal a `Soporte Macmillan`
-- Nuevo rol `manager` para acceso a estadísticas
+- Nuevo rol `manager` para acceso a estadisticas
 - Nueva base de formulario para incidencias educativas:
   - colegio
   - correo del informador
   - consulta sobre alumno/docente
-  - matrícula
+  - matricula
   - etapa
   - curso
   - asignatura
   - tipo de consulta
-  - descripción
+  - descripcion
   - observaciones
-- Vista `/admin` como backoffice técnico inicial
+- Vista `/admin` como backoffice tecnico inicial
 - Base de datos preparada con tabla `schools`
 
 ## Arquitectura objetivo
 
 El objetivo de negocio es evolucionar hacia:
 
-- una misma base de datos PostgreSQL
-- un esquema lógico por cliente o grupo educativo
+- una misma base de datos MySQL
+- un esquema logico por cliente o grupo educativo
 - datos operativos separados por cliente
-- operación centralizada del equipo técnico de Macmillan
+- operacion centralizada del equipo tecnico de Macmillan
 
-En esta iteración se mantiene la lógica actual por `tenantId` para no romper el sistema existente, pero se deja preparado el terreno para:
+En esta iteracion se mantiene la logica actual por `tenantId` para no romper el sistema existente, pero se deja preparado el terreno para:
 
-- añadir `dbSchema` por cliente
+- anadir `dbSchema` por cliente
 - gestionar colegios dependientes de un cliente principal
-- separar más tarde consultas, documentos y configuraciones por esquema
+- separar mas tarde consultas, documentos y configuraciones por esquema
 
-## Próximos módulos recomendados
+## Proximos modulos recomendados
 
 ### 1. Correo transaccional
 
-- aviso al equipo técnico al crear incidencia
-- confirmación al usuario al cerrar o resolver ticket
+- aviso al equipo tecnico al crear incidencia
+- confirmacion al usuario al cerrar o resolver ticket
 - plantillas por cliente
 
-### 2. Gestión real de colegios
+### 2. Gestion real de colegios
 
 - CRUD de colegios en `/admin`
-- jerarquía colegio central / colegios asociados
-- filtros y estadísticas por colegio
+- jerarquia colegio central / colegios asociados
+- filtros y estadisticas por colegio
 
-### 3. Exportación e informes
+### 3. Exportacion e informes
 
-- exportación CSV/XLSX
+- exportacion CSV/XLSX
 - informes por rango de fechas
-- resúmenes por colegio, etapa, asignatura y tipo de consulta
+- resumenes por colegio, etapa, asignatura y tipo de consulta
 
-### 4. Estadísticas avanzadas
+### 4. Estadisticas avanzadas
 
-- distribución por colegio
-- distribución por etapa educativa
-- tiempos medios de resolución por colegio
+- distribucion por colegio
+- distribucion por etapa educativa
+- tiempos medios de resolucion por colegio
 - reparto por profesor o informador
 
-### 5. IA conversacional
-
-- configuración de `OPENAI_API_KEY`
-- acceso a tickets, documentos y base de conocimiento
-- respuestas asistidas para soporte
-
-### 6. Accesos rápidos de cliente
+### 5. Accesos rapidos de cliente
 
 - enlaces configurables por tenant
 - accesos a plataformas Macmillan
