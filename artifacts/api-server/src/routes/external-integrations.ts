@@ -3,7 +3,7 @@ import { Router } from "express";
 import { and, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { ticketsTable, usersTable } from "@workspace/db/schema";
+import { schoolsTable, tenantsTable, ticketsTable, usersTable } from "@workspace/db/schema";
 import { createAuditLog } from "../lib/audit.js";
 import { stringifyDbJson } from "../lib/db-json.js";
 
@@ -55,6 +55,70 @@ function getConfiguredSchoolId() {
   const rawValue = process.env["EXTERNAL_INTEGRATION_SCHOOL_ID"];
   const parsedValue = rawValue ? Number(rawValue) : Number.NaN;
   return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : null;
+}
+
+async function validateConfiguredTargets(tenantId: number, schoolId: number | null) {
+  const tenantRows = await db
+    .select({
+      id: tenantsTable.id,
+      active: tenantsTable.active,
+    })
+    .from(tenantsTable)
+    .where(eq(tenantsTable.id, tenantId))
+    .limit(1);
+
+  const tenant = tenantRows[0];
+  if (!tenant) {
+    return {
+      ok: false as const,
+      message: "EXTERNAL_INTEGRATION_TENANT_ID no existe en SOP_tenants.",
+    };
+  }
+
+  if (!tenant.active) {
+    return {
+      ok: false as const,
+      message: "El tenant configurado para la integracion externa esta inactivo.",
+    };
+  }
+
+  if (!schoolId) {
+    return { ok: true as const };
+  }
+
+  const schoolRows = await db
+    .select({
+      id: schoolsTable.id,
+      tenantId: schoolsTable.tenantId,
+      active: schoolsTable.active,
+    })
+    .from(schoolsTable)
+    .where(eq(schoolsTable.id, schoolId))
+    .limit(1);
+
+  const school = schoolRows[0];
+  if (!school) {
+    return {
+      ok: false as const,
+      message: "EXTERNAL_INTEGRATION_SCHOOL_ID no existe en SOP_schools.",
+    };
+  }
+
+  if (!school.active) {
+    return {
+      ok: false as const,
+      message: "El colegio configurado para la integracion externa esta inactivo.",
+    };
+  }
+
+  if (school.tenantId !== tenantId) {
+    return {
+      ok: false as const,
+      message: "EXTERNAL_INTEGRATION_SCHOOL_ID no pertenece al tenant configurado.",
+    };
+  }
+
+  return { ok: true as const };
 }
 
 function buildTicketCategory(type: ExternalPayload["type"]) {
@@ -160,13 +224,22 @@ async function resolveCreatedById(reporterEmail: string) {
 function isValidApiKey(requestApiKey: string | undefined) {
   const configuredApiKey = process.env["EXTERNAL_INTEGRATION_API_KEY"]?.trim();
   if (!configuredApiKey) {
-    return true;
+    return false;
   }
 
   return requestApiKey === configuredApiKey;
 }
 
 router.post("/external", async (req, res) => {
+  if (!process.env["EXTERNAL_INTEGRATION_API_KEY"]?.trim()) {
+    res.status(503).json({
+      ok: false,
+      error: "ConfigurationError",
+      message: "Falta configurar EXTERNAL_INTEGRATION_API_KEY.",
+    });
+    return;
+  }
+
   if (!isValidApiKey(req.header("x-api-key") ?? undefined)) {
     res.status(401).json({
       ok: false,
@@ -188,11 +261,22 @@ router.post("/external", async (req, res) => {
   }
 
   const tenantId = getConfiguredTenantId();
+  const schoolId = getConfiguredSchoolId();
   if (!tenantId) {
     res.status(503).json({
       ok: false,
       error: "ConfigurationError",
       message: "Falta configurar EXTERNAL_INTEGRATION_TENANT_ID.",
+    });
+    return;
+  }
+
+  const targetValidation = await validateConfiguredTargets(tenantId, schoolId);
+  if (!targetValidation.ok) {
+    res.status(503).json({
+      ok: false,
+      error: "ConfigurationError",
+      message: targetValidation.message,
     });
     return;
   }
@@ -219,7 +303,6 @@ router.post("/external", async (req, res) => {
   }
 
   const ticketNumber = generateTicketNumber();
-  const schoolId = getConfiguredSchoolId();
   const customFields = buildCustomFields(parsedPayload.data);
 
   await db.insert(ticketsTable).values({

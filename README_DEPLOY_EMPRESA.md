@@ -147,7 +147,7 @@ MICROSOFT_REDIRECT_URI=https://premac.starxia.com/api/auth/microsoft/callback
 
 TICKET_RESOLVED_NOTIFY_TO=
 STATIC_DIR=
-EXTERNAL_INTEGRATION_API_KEY=
+EXTERNAL_INTEGRATION_API_KEY=GENERAR_CLAVE_LARGA_ALEATORIA
 EXTERNAL_INTEGRATION_TENANT_ID=
 EXTERNAL_INTEGRATION_SCHOOL_ID=
 EXTERNAL_INTEGRATION_FALLBACK_USER_ID=
@@ -172,11 +172,48 @@ EXTERNAL_INTEGRATION_FALLBACK_USER_EMAIL=
 - `MICROSOFT_CLIENT_SECRET`: secreto del registro Azure
 - `MICROSOFT_TENANT_ID`: `common` o el tenant real
 - `MICROSOFT_REDIRECT_URI`: callback configurada en Azure
+- `EXTERNAL_INTEGRATION_API_KEY`: clave obligatoria para autenticar el servicio externo que envia tickets
+- `EXTERNAL_INTEGRATION_TENANT_ID`: tenant destino donde se crearan esos tickets
+- `EXTERNAL_INTEGRATION_SCHOOL_ID`: colegio destino opcional; si se informa, debe pertenecer al tenant configurado
+- `EXTERNAL_INTEGRATION_FALLBACK_USER_ID`: usuario tecnico o de servicio que figurara como creador si `reporterEmail` no existe
 
 Generar secretos:
 
 ```bash
 openssl rand -hex 32
+```
+
+### Integracion externa de tickets
+
+La recepcion de tickets externos queda publicada en:
+
+```text
+POST /api/integrations/external
+```
+
+Requisitos:
+
+- cabecera `x-api-key` con el valor de `EXTERNAL_INTEGRATION_API_KEY`
+- `EXTERNAL_INTEGRATION_TENANT_ID` configurado
+- `EXTERNAL_INTEGRATION_FALLBACK_USER_ID` recomendado para asegurar un creador valido
+
+Ejemplo:
+
+```bash
+curl -X POST "https://premac.starxia.com/api/integrations/external" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: TU_API_KEY" \
+  -d '{
+    "externalId": "ext-123",
+    "type": "email_change",
+    "reporterEmail": "origen@cliente.com",
+    "affectedEmail": "usuario@dominio.com",
+    "newEmail": "usuario.nuevo@dominio.com",
+    "orderId": "PED-001",
+    "title": "Cambio de correo",
+    "description": "Solicitud recibida desde sistema externo para cambiar correo.",
+    "reason": "Cuenta duplicada"
+  }'
 ```
 
 ## 8. Crear tablas
