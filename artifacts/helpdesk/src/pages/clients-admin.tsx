@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useCreateTenant, useGetMe, useListTenants, useUpdateTenant } from "@workspace/api-client-react";
+import { customFetch, useCreateTenant, useGetMe, useListTenants, useUpdateTenant } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Search, Plus, Building2, Users, Ticket, Link as LinkIcon, Trash2, Upload, ExternalLink, Pencil, Power } from "lucide-react";
+import { Search, Plus, Building2, Users, Ticket, Link as LinkIcon, Trash2, Upload, ExternalLink, Pencil, Power, KeyRound, Copy } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useForm } from "react-hook-form";
@@ -33,6 +33,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 const sidebarPalette = [
   { label: "Azul Macmillan", value: "#0f172a" },
@@ -87,6 +88,22 @@ type SchoolDraft = {
   code: string;
   isHeadquarters: boolean;
   active: boolean;
+  externalApiEnabled: boolean;
+  externalApiClientId?: string | null;
+  externalApiKeyConfigured?: boolean;
+  externalApiKeyCreatedAt?: string | null;
+};
+type ExternalApiProvisioning = {
+  schoolId: number;
+  schoolName: string;
+  clientId: string;
+  apiKey: string;
+  tenantId: number;
+  schoolIdTarget: number;
+  examplePayload: {
+    headers: Record<string, string>;
+    body: Record<string, unknown>;
+  };
 };
 type TenantRow = {
   id: number;
@@ -106,7 +123,18 @@ type TenantRow = {
   hasOrderLookup?: boolean | null;
   hasReturnsAccess?: boolean | null;
   quickLinks?: Array<{ label: string; url: string; icon: string }> | null;
-  schools?: Array<{ id: number; name: string; code?: string | null; isHeadquarters?: boolean; active: boolean }> | null;
+  schools?: Array<{
+    id: number;
+    name: string;
+    code?: string | null;
+    isHeadquarters?: boolean;
+    active: boolean;
+    externalApiEnabled?: boolean;
+    externalApiClientId?: string | null;
+    externalApiKeyConfigured?: boolean;
+    externalApiKeyCreatedAt?: string | null;
+  }> | null;
+  externalApiProvisioning?: ExternalApiProvisioning[] | null;
 };
 
 function isQuickLinkImage(icon: string) {
@@ -220,6 +248,10 @@ function createEmptySchool(): SchoolDraft {
     code: "",
     isHeadquarters: false,
     active: true,
+    externalApiEnabled: false,
+    externalApiClientId: null,
+    externalApiKeyConfigured: false,
+    externalApiKeyCreatedAt: null,
   };
 }
 
@@ -260,7 +292,25 @@ function mapSchoolsToDrafts(schools?: Array<{ id: number; name: string; code?: s
     code: school.code ?? "",
     isHeadquarters: Boolean(school.isHeadquarters),
     active: school.active,
+    externalApiEnabled: Boolean((school as any).externalApiEnabled),
+    externalApiClientId: (school as any).externalApiClientId ?? null,
+    externalApiKeyConfigured: Boolean((school as any).externalApiKeyConfigured),
+    externalApiKeyCreatedAt: (school as any).externalApiKeyCreatedAt ?? null,
   }));
+}
+
+function buildExternalApiDeliveryNote(provisioning: ExternalApiProvisioning) {
+  return [
+    `Cliente: ${provisioning.clientId}`,
+    `Endpoint: /api/integrations/external`,
+    `Cabeceras obligatorias:`,
+    `x-client-id: ${provisioning.clientId}`,
+    `x-api-key: ${provisioning.apiKey}`,
+    `Content-Type: application/json`,
+    ``,
+    `Ejemplo de payload:`,
+    JSON.stringify(provisioning.examplePayload.body, null, 2),
+  ].join("\n");
 }
 
 export default function ClientsAdmin() {
@@ -271,6 +321,7 @@ export default function ClientsAdmin() {
   const [editingTenant, setEditingTenant] = useState<TenantRow | null>(null);
   const [quickLinks, setQuickLinks] = useState<QuickLinkDraft[]>([]);
   const [schools, setSchools] = useState<SchoolDraft[]>([]);
+  const [externalApiProvisioning, setExternalApiProvisioning] = useState<ExternalApiProvisioning[]>([]);
 
   const { data: tenantsData, isLoading, refetch } = useListTenants({
     page,
@@ -280,6 +331,10 @@ export default function ClientsAdmin() {
 
   const canManageTenants = useMemo(
     () => ["superadmin", "tecnico", "manager"].includes(currentUser?.role || ""),
+    [currentUser?.role],
+  );
+  const canManageSchoolIntegrations = useMemo(
+    () => ["superadmin", "tecnico"].includes(currentUser?.role || ""),
     [currentUser?.role],
   );
 
@@ -302,10 +357,13 @@ export default function ClientsAdmin() {
   const sidebarTextColor = form.watch("sidebarTextColor");
   const primaryColor = form.watch("primaryColor");
 
-  function resetTenantForm() {
+  function resetTenantForm(clearProvisioning = true) {
     setEditingTenant(null);
     setQuickLinks([]);
     setSchools([]);
+    if (clearProvisioning) {
+      setExternalApiProvisioning([]);
+    }
     form.reset({
       name: "",
       contactEmail: "",
@@ -344,13 +402,15 @@ export default function ClientsAdmin() {
 
   const createTenant = useCreateTenant({
     mutation: {
-      onSuccess: async () => {
+      onSuccess: async (response: any) => {
+        const provisioning = Array.isArray(response?.externalApiProvisioning) ? response.externalApiProvisioning : [];
+        setExternalApiProvisioning(provisioning);
         toast({
           title: "Colegio creado",
           description: "El nuevo colegio ya esta disponible para configurarlo.",
         });
         setOpen(false);
-        resetTenantForm();
+        resetTenantForm(false);
         await refetch();
       },
       onError: (error) => {
@@ -366,7 +426,9 @@ export default function ClientsAdmin() {
 
   const updateTenant = useUpdateTenant({
     mutation: {
-      onSuccess: async (_, variables) => {
+      onSuccess: async (response: any, variables) => {
+        const provisioning = Array.isArray(response?.externalApiProvisioning) ? response.externalApiProvisioning : [];
+        setExternalApiProvisioning(provisioning);
         const action = variables.data.active === false ? "Colegio desactivado" : variables.data.active === true ? "Colegio reactivado" : "Colegio actualizado";
         toast({
           title: action,
@@ -377,7 +439,7 @@ export default function ClientsAdmin() {
               : "Los cambios del colegio ya estan guardados.",
         });
         setOpen(false);
-        resetTenantForm();
+        resetTenantForm(false);
         await refetch();
       },
       onError: (error) => {
@@ -432,6 +494,7 @@ export default function ClientsAdmin() {
         code: school.code.trim() || null,
         isHeadquarters: school.isHeadquarters,
         active: school.active,
+        externalApiEnabled: school.externalApiEnabled,
       }));
 
     const headquarters = normalized.filter((school) => school.isHeadquarters);
@@ -527,6 +590,43 @@ export default function ClientsAdmin() {
 
   function removeSchool(localId: string) {
     setSchools((current) => current.filter((school) => school.localId !== localId));
+  }
+
+  async function copyText(text: string, successMessage: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copiado", description: successMessage });
+    } catch {
+      toast({ title: "No se pudo copiar", description: "Copia el contenido manualmente.", variant: "destructive" });
+    }
+  }
+
+  async function regenerateSchoolExternalApi(school: SchoolDraft) {
+    if (!editingTenant || !school.id) return;
+
+    try {
+      const response = await customFetch<ExternalApiProvisioning>(`/api/tenants/${editingTenant.id}/schools/${school.id}/external-api/regenerate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      setSchools((current) => current.map((currentSchool) => currentSchool.localId === school.localId ? {
+        ...currentSchool,
+        externalApiEnabled: true,
+        externalApiClientId: response.clientId,
+        externalApiKeyConfigured: true,
+        externalApiKeyCreatedAt: new Date().toISOString(),
+      } : currentSchool));
+      setExternalApiProvisioning([response]);
+      await refetch();
+    } catch (error) {
+      toast({
+        title: "No se pudo regenerar la API",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo.",
+        variant: "destructive",
+      });
+    }
   }
 
   function onShortcutIconSelected(id: string, file?: File | null) {
@@ -921,6 +1021,49 @@ export default function ClientsAdmin() {
                                   {school.isHeadquarters ? "Matriz" : "Marcar matriz"}
                                 </Button>
                               </div>
+                              {canManageSchoolIntegrations && (
+                                <div className="mt-4 rounded-xl border bg-slate-50/70 p-4">
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">API externa por colegio</p>
+                                      <p className="text-xs text-slate-500">
+                                        Si la activas, este colegio tendra un `x-client-id` propio y una clave secreta generada en backend.
+                                      </p>
+                                    </div>
+                                    <Switch
+                                      checked={school.externalApiEnabled}
+                                      onCheckedChange={(checked) => updateSchool(school.localId, { externalApiEnabled: checked })}
+                                    />
+                                  </div>
+                                  {school.externalApiEnabled && (
+                                    <div className="mt-3 space-y-3">
+                                      <div className="rounded-lg bg-white p-3 text-xs text-slate-600">
+                                        <p><span className="font-semibold text-slate-900">Client ID:</span> {school.externalApiClientId || "Se generara al guardar"}</p>
+                                        <p><span className="font-semibold text-slate-900">Clave actual:</span> {school.externalApiKeyConfigured ? "Configurada en backend" : "Se generara al guardar"}</p>
+                                      </div>
+                                      {school.id && (
+                                        <div className="flex flex-wrap gap-2">
+                                          <Button type="button" variant="outline" className="gap-2" onClick={() => void regenerateSchoolExternalApi(school)}>
+                                            <KeyRound className="h-4 w-4" />
+                                            Regenerar clave
+                                          </Button>
+                                          {school.externalApiClientId && (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              className="gap-2"
+                                              onClick={() => void copyText(school.externalApiClientId || "", "Client ID copiado.")}
+                                            >
+                                              <Copy className="h-4 w-4" />
+                                              Copiar client ID
+                                            </Button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1020,6 +1163,54 @@ export default function ClientsAdmin() {
           </Dialog>
         )}
       </div>
+
+      <Dialog
+        open={externalApiProvisioning.length > 0}
+        onOpenChange={(openProvisioning) => {
+          if (!openProvisioning) setExternalApiProvisioning([]);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Credenciales de integracion generadas</DialogTitle>
+            <DialogDescription>
+              Guarda estas claves ahora. Solo se muestran en el momento de generacion o regeneracion.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto">
+            {externalApiProvisioning.map((provisioning) => (
+              <div key={`${provisioning.schoolId}-${provisioning.clientId}`} className="rounded-xl border p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{provisioning.schoolName}</p>
+                    <p className="text-xs text-slate-500">Colegio preparado para integracion externa</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => void copyText(buildExternalApiDeliveryNote(provisioning), "Plantilla de entrega copiada.")}
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copiar entrega
+                  </Button>
+                </div>
+                <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-sm">
+                  <p><span className="font-semibold text-slate-900">Endpoint:</span> `/api/integrations/external`</p>
+                  <p><span className="font-semibold text-slate-900">x-client-id:</span> `{provisioning.clientId}`</p>
+                  <p><span className="font-semibold text-slate-900">x-api-key:</span> `{provisioning.apiKey}`</p>
+                </div>
+                <div className="mt-3 rounded-lg border bg-slate-950 p-3 text-xs text-slate-100">
+                  <pre className="overflow-x-auto whitespace-pre-wrap">{JSON.stringify(provisioning.examplePayload.body, null, 2)}</pre>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setExternalApiProvisioning([])}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card className="flex gap-4 p-4">
         <div className="relative flex-1">

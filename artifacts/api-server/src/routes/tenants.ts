@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -5,6 +6,7 @@ import { schoolsTable, tenantsTable, ticketsTable, usersTable } from "@workspace
 import { eq, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth.js";
 import { createAuditLog } from "../lib/audit.js";
+import { hashPassword } from "../lib/auth.js";
 import { parseDbJson, stringifyDbJson } from "../lib/db-json.js";
 import { containsInsensitive } from "../lib/db-search.js";
 
@@ -22,7 +24,22 @@ const schoolInputSchema = z.object({
   code: z.string().nullable().optional(),
   isHeadquarters: z.boolean().optional(),
   active: z.boolean().optional(),
+  externalApiEnabled: z.boolean().optional(),
 });
+
+const regenerateSchoolExternalApiSchema = z.object({
+  fallbackUserId: z.number().int().positive().nullable().optional(),
+});
+
+type ExternalApiProvisioning = {
+  schoolId: number;
+  schoolName: string;
+  clientId: string;
+  apiKey: string;
+  tenantId: number;
+  schoolIdTarget: number;
+  examplePayload: Record<string, unknown>;
+};
 
 const createTenantSchema = z.object({
   name: z.string().min(2),
@@ -68,6 +85,35 @@ function slugifySchoolName(name: string) {
     .slice(0, 120) || `school-${Date.now()}`;
 }
 
+function buildSchoolExternalClientId(tenantSlug: string, schoolSlug: string) {
+  return `${tenantSlug}-${schoolSlug}-${crypto.randomBytes(4).toString("hex")}`.slice(0, 160);
+}
+
+function generateExternalApiKey() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function buildExternalIntegrationExample(clientId: string) {
+  return {
+    headers: {
+      "Content-Type": "application/json",
+      "x-client-id": clientId,
+      "x-api-key": "<SECRET>",
+    },
+    body: {
+      externalId: "ext-001",
+      type: "email_change",
+      reporterEmail: "origen@cliente.com",
+      affectedEmail: "usuario@dominio.com",
+      newEmail: "usuario.nuevo@dominio.com",
+      orderId: "PED-001",
+      title: "Cambio de correo",
+      description: "Solicitud recibida desde sistema externo para cambiar correo.",
+      reason: "Cuenta duplicada",
+    },
+  };
+}
+
 async function getTenantSchools(tenantId: number) {
   const schools = await db
     .select({
@@ -78,6 +124,10 @@ async function getTenantSchools(tenantId: number) {
       slug: schoolsTable.slug,
       code: schoolsTable.code,
       isHeadquarters: schoolsTable.isHeadquarters,
+      externalApiEnabled: schoolsTable.externalApiEnabled,
+      externalApiClientId: schoolsTable.externalApiClientId,
+      externalApiKeyConfigured: sql<boolean>`${schoolsTable.externalApiKeyHash} IS NOT NULL`,
+      externalApiKeyCreatedAt: schoolsTable.externalApiKeyCreatedAt,
       active: schoolsTable.active,
       createdAt: schoolsTable.createdAt,
       updatedAt: schoolsTable.updatedAt,
@@ -89,47 +139,133 @@ async function getTenantSchools(tenantId: number) {
   return schools;
 }
 
-async function syncTenantSchools(tenantId: number, schools: Array<z.infer<typeof schoolInputSchema>>) {
-  const existingSchools = await getTenantSchools(tenantId);
+async function syncTenantSchools(
+  tenant: { id: number; slug: string },
+  schools: Array<z.infer<typeof schoolInputSchema>>,
+) {
+  const existingSchools = await db
+    .select({
+      id: schoolsTable.id,
+      tenantId: schoolsTable.tenantId,
+      name: schoolsTable.name,
+      slug: schoolsTable.slug,
+      active: schoolsTable.active,
+      externalApiEnabled: schoolsTable.externalApiEnabled,
+      externalApiClientId: schoolsTable.externalApiClientId,
+      externalApiKeyHash: schoolsTable.externalApiKeyHash,
+      externalApiKeyCreatedAt: schoolsTable.externalApiKeyCreatedAt,
+    })
+    .from(schoolsTable)
+    .where(eq(schoolsTable.tenantId, tenant.id));
   const existingById = new Map(existingSchools.map((school) => [school.id, school]));
   const incomingIds = new Set<number>();
+  const provisioning: ExternalApiProvisioning[] = [];
 
   for (const school of schools) {
+    const nextSchoolSlug = slugifySchoolName(school.name);
+    const externalApiEnabled = school.externalApiEnabled ?? false;
+
     if (school.id && existingById.has(school.id)) {
       incomingIds.add(school.id);
+      const existingSchool = existingById.get(school.id)!;
+      const shouldGenerateApiKey = externalApiEnabled && (!existingSchool.externalApiEnabled || !existingSchool.externalApiKeyHash);
+      const nextApiKey = shouldGenerateApiKey ? generateExternalApiKey() : null;
+      const nextClientId = externalApiEnabled
+        ? existingSchool.externalApiClientId || buildSchoolExternalClientId(tenant.slug, nextSchoolSlug)
+        : null;
+
       await db
         .update(schoolsTable)
         .set({
           name: school.name.trim(),
-          slug: slugifySchoolName(school.name),
+          slug: nextSchoolSlug,
           code: school.code?.trim() || null,
           isHeadquarters: school.isHeadquarters ?? false,
+          externalApiEnabled,
+          externalApiClientId: externalApiEnabled ? nextClientId : null,
+          externalApiKeyHash: externalApiEnabled
+            ? nextApiKey
+              ? await hashPassword(nextApiKey)
+              : existingSchool.externalApiKeyHash ?? null
+            : null,
+          externalApiKeyCreatedAt: externalApiEnabled
+            ? nextApiKey
+              ? new Date()
+              : existingSchool.externalApiKeyCreatedAt ?? null
+            : null,
           active: school.active ?? true,
           updatedAt: new Date(),
         })
         .where(eq(schoolsTable.id, school.id));
+
+      if (shouldGenerateApiKey && nextApiKey) {
+        provisioning.push({
+          schoolId: school.id,
+          schoolName: school.name.trim(),
+          clientId: nextClientId,
+          apiKey: nextApiKey,
+          tenantId: tenant.id,
+          schoolIdTarget: school.id,
+          examplePayload: buildExternalIntegrationExample(nextClientId),
+        });
+      }
       continue;
     }
 
+    const nextApiKey = externalApiEnabled ? generateExternalApiKey() : null;
+    const nextClientId = externalApiEnabled ? buildSchoolExternalClientId(tenant.slug, nextSchoolSlug) : null;
     await db.insert(schoolsTable).values({
-      tenantId,
+      tenantId: tenant.id,
       parentSchoolId: null,
       name: school.name.trim(),
-      slug: slugifySchoolName(school.name),
+      slug: nextSchoolSlug,
       code: school.code?.trim() || null,
       isHeadquarters: school.isHeadquarters ?? false,
+      externalApiEnabled,
+      externalApiClientId: nextClientId,
+      externalApiKeyHash: nextApiKey ? await hashPassword(nextApiKey) : null,
+      externalApiKeyCreatedAt: nextApiKey ? new Date() : null,
       active: school.active ?? true,
     });
+
+    const insertedSchoolRows = await db
+      .select({ id: schoolsTable.id })
+      .from(schoolsTable)
+      .where(and(eq(schoolsTable.tenantId, tenant.id), eq(schoolsTable.slug, nextSchoolSlug)))
+      .orderBy(sql`${schoolsTable.id} DESC`)
+      .limit(1);
+
+    const insertedId = Number(insertedSchoolRows[0]?.id ?? 0);
+    if (externalApiEnabled && nextApiKey && insertedId > 0) {
+      provisioning.push({
+        schoolId: insertedId,
+        schoolName: school.name.trim(),
+        clientId: nextClientId,
+        apiKey: nextApiKey,
+        tenantId: tenant.id,
+        schoolIdTarget: insertedId,
+        examplePayload: buildExternalIntegrationExample(nextClientId),
+      });
+    }
   }
 
   for (const existingSchool of existingSchools) {
     if (!incomingIds.has(existingSchool.id) && schools.some((school) => school.id === existingSchool.id) === false) {
       await db
         .update(schoolsTable)
-        .set({ active: false, updatedAt: new Date() })
+        .set({
+          active: false,
+          externalApiEnabled: false,
+          externalApiClientId: null,
+          externalApiKeyHash: null,
+          externalApiKeyCreatedAt: null,
+          updatedAt: new Date(),
+        })
         .where(eq(schoolsTable.id, existingSchool.id));
     }
   }
+
+  return provisioning;
 }
 
 function isDuplicateEntryError(error: any) {
@@ -223,9 +359,10 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
       throw new Error("Tenant insert succeeded but could not be reloaded.");
     }
 
-    if (parsed.data.schools?.length) {
-      await syncTenantSchools(createdTenant.id, parsed.data.schools);
-    }
+    const externalApiProvisioning =
+      parsed.data.schools?.length
+        ? await syncTenantSchools({ id: createdTenant.id, slug: createdTenant.slug }, parsed.data.schools)
+        : [];
 
     const schools = await getTenantSchools(createdTenant.id);
 
@@ -241,6 +378,7 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
       ...createdTenant,
       quickLinks: parseQuickLinks(createdTenant.quickLinks),
       schools,
+      externalApiProvisioning,
       totalUsers: 0,
       totalTickets: 0,
       openTickets: 0,
@@ -324,9 +462,9 @@ router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente
     .set(updateValues as any)
     .where(eq(tenantsTable.id, tenantId));
 
-  if (parsed.data.schools) {
-    await syncTenantSchools(tenantId, parsed.data.schools);
-  }
+  const externalApiProvisioning = parsed.data.schools
+    ? await syncTenantSchools({ id: tenantId, slug: old.slug }, parsed.data.schools)
+    : [];
 
   const updated = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
   const updatedTenant = updated[0];
@@ -358,9 +496,76 @@ router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente
     ...updatedTenant,
     quickLinks: parseQuickLinks(updatedTenant.quickLinks),
     schools,
+    externalApiProvisioning,
     totalUsers: Number(userCount[0]?.count ?? 0),
     totalTickets: Number(ticketCount[0]?.count ?? 0),
     openTickets: Number(openTicketCount[0]?.count ?? 0),
+  });
+});
+
+router.post("/:tenantId/schools/:schoolId/external-api/regenerate", requireAuth, requireRole("superadmin", "tecnico"), async (req, res) => {
+  const tenantId = Number(req.params["tenantId"]);
+  const schoolId = Number(req.params["schoolId"]);
+  const authUser = (req as any).user;
+  const parsed = regenerateSchoolExternalApiSchema.safeParse(req.body ?? {});
+
+  if (!parsed.success) {
+    res.status(400).json({ error: "ValidationError", message: parsed.error.message });
+    return;
+  }
+
+  const tenantRows = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
+  const tenant = tenantRows[0];
+  if (!tenant) {
+    res.status(404).json({ error: "NotFound", message: "Tenant not found" });
+    return;
+  }
+
+  const schoolRows = await db
+    .select()
+    .from(schoolsTable)
+    .where(and(eq(schoolsTable.id, schoolId), eq(schoolsTable.tenantId, tenantId)))
+    .limit(1);
+
+  const school = schoolRows[0];
+  if (!school) {
+    res.status(404).json({ error: "NotFound", message: "School not found" });
+    return;
+  }
+
+  const clientId = school.externalApiClientId || buildSchoolExternalClientId(tenant.slug, school.slug);
+  const apiKey = generateExternalApiKey();
+
+  await db
+    .update(schoolsTable)
+    .set({
+      externalApiEnabled: true,
+      externalApiClientId: clientId,
+      externalApiKeyHash: await hashPassword(apiKey),
+      externalApiKeyCreatedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(schoolsTable.id, schoolId));
+
+  await createAuditLog({
+    action: "regenerate_external_api_key",
+    entityType: "school",
+    entityId: schoolId,
+    userId: authUser.userId,
+    tenantId,
+    newValues: {
+      schoolName: school.name,
+      clientId,
+    },
+  });
+
+  res.json({
+    schoolId,
+    schoolName: school.name,
+    clientId,
+    apiKey,
+    tenantId,
+    examplePayload: buildExternalIntegrationExample(clientId),
   });
 });
 

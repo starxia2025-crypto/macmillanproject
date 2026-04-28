@@ -6,6 +6,7 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import { schoolsTable, tenantsTable, ticketsTable, usersTable } from "@workspace/db/schema";
 import { createAuditLog } from "../lib/audit.js";
+import { verifyPassword } from "../lib/auth.js";
 import { stringifyDbJson } from "../lib/db-json.js";
 import { logger } from "../lib/logger.js";
 
@@ -43,7 +44,8 @@ const externalPayloadSchema = z.discriminatedUnion("type", [
 type ExternalPayload = z.infer<typeof externalPayloadSchema>;
 type ExternalClientConfig = {
   clientId: string;
-  apiKey: string;
+  apiKey: string | null;
+  apiKeyHash: string | null;
   tenantId: number;
   schoolId: number | null;
   fallbackUserId: number | null;
@@ -91,6 +93,7 @@ function parseExternalClientsFromJson() {
   return externalClientsSchema.parse(parsedValue).map((client) => ({
     clientId: client.clientId.trim(),
     apiKey: client.apiKey.trim(),
+    apiKeyHash: null,
     tenantId: client.tenantId,
     schoolId: client.schoolId ?? null,
     fallbackUserId: client.fallbackUserId ?? null,
@@ -106,6 +109,7 @@ function getLegacyExternalClientConfig() {
   return {
     clientId: process.env["EXTERNAL_INTEGRATION_CLIENT_ID"]?.trim() || "default",
     apiKey,
+    apiKeyHash: null,
     tenantId,
     schoolId: parsePositiveInteger(process.env["EXTERNAL_INTEGRATION_SCHOOL_ID"]),
     fallbackUserId: parsePositiveInteger(process.env["EXTERNAL_INTEGRATION_FALLBACK_USER_ID"]),
@@ -123,8 +127,35 @@ function getConfiguredExternalClients() {
   return legacyClient ? [legacyClient] : [];
 }
 
-function resolveExternalClient(clientId: string | null) {
+async function resolveExternalClient(clientId: string | null) {
   if (!clientId) return null;
+
+  const schoolRows = await db
+    .select({
+      id: schoolsTable.id,
+      tenantId: schoolsTable.tenantId,
+      active: schoolsTable.active,
+      externalApiEnabled: schoolsTable.externalApiEnabled,
+      externalApiClientId: schoolsTable.externalApiClientId,
+      externalApiKeyHash: schoolsTable.externalApiKeyHash,
+    })
+    .from(schoolsTable)
+    .where(eq(schoolsTable.externalApiClientId, clientId))
+    .limit(1);
+
+  const school = schoolRows[0];
+  if (school?.active && school.externalApiEnabled && school.externalApiClientId && school.externalApiKeyHash) {
+    return {
+      clientId: school.externalApiClientId,
+      apiKey: null,
+      apiKeyHash: school.externalApiKeyHash,
+      tenantId: school.tenantId,
+      schoolId: school.id,
+      fallbackUserId: null,
+      fallbackUserEmail: null,
+    } satisfies ExternalClientConfig;
+  }
+
   return getConfiguredExternalClients().find((client) => client.clientId === clientId) ?? null;
 }
 
@@ -299,12 +330,20 @@ async function resolveCreatedById(reporterEmail: string, clientConfig: ExternalC
   return technicalUsers[0]?.id ?? null;
 }
 
-function isValidApiKey(requestApiKey: string | undefined, configuredApiKey: string) {
+async function isValidApiKey(requestApiKey: string | undefined, clientConfig: ExternalClientConfig) {
   if (!requestApiKey?.trim()) {
     return false;
   }
 
-  return safeCompare(requestApiKey.trim(), configuredApiKey);
+  if (clientConfig.apiKeyHash) {
+    return verifyPassword(requestApiKey.trim(), clientConfig.apiKeyHash);
+  }
+
+  if (!clientConfig.apiKey) {
+    return false;
+  }
+
+  return safeCompare(requestApiKey.trim(), clientConfig.apiKey);
 }
 
 const externalIntegrationRateLimit = rateLimit({
@@ -349,8 +388,8 @@ router.post("/external", externalIntegrationRateLimit, async (req, res) => {
       return;
     }
 
-    const clientConfig = resolveExternalClient(clientId);
-    if (!clientConfig || !isValidApiKey(requestApiKey, clientConfig.apiKey)) {
+    const clientConfig = await resolveExternalClient(clientId);
+    if (!clientConfig || !(await isValidApiKey(requestApiKey, clientConfig))) {
       logger.warn({
         action: "external_integration_auth_failed",
         clientId,
