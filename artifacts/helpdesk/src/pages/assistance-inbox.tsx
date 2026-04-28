@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { customFetch } from "@workspace/api-client-react";
-import { format } from "date-fns";
+import { customFetch, useGetMe } from "@workspace/api-client-react";
+import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import { AssistanceStatusBadge, PriorityBadge } from "@/components/badges";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { CalendarDays, CalendarPlus2, Filter, Loader2, NotebookPen, RefreshCcw } from "lucide-react";
+import { ArrowRight, CalendarDays, CalendarPlus2, CheckCircle2, Eye, Filter, Inbox, Loader2, NotebookPen, RefreshCcw, UserRoundCheck } from "lucide-react";
 
 type AssistanceMeta = {
   schools: Array<{ id: number; tenantId: number; name: string }>;
@@ -78,7 +78,110 @@ const statusLabels: Record<string, string> = {
   rechazada: "Rechazada",
 };
 
+const openStatuses = ["pendiente", "aceptada", "programada", "en_curso"];
+
+function SupportAssistanceCard({
+  item,
+  currentUserId,
+  onTake,
+  onComplete,
+  onOpen,
+  busy,
+}: {
+  item: AssistanceSupportItem;
+  currentUserId: number;
+  onTake: (requestId: number) => void;
+  onComplete: (requestId: number) => void;
+  onOpen: (requestId: number) => void;
+  busy?: boolean;
+}) {
+  const isMine = item.assignedToId === currentUserId;
+  const occupiedByOther = !!item.assignedToId && item.assignedToId !== currentUserId;
+
+  return (
+    <Card className="overflow-hidden border-slate-200 shadow-sm transition hover:shadow-md">
+      <CardContent className="p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 font-mono text-xs font-semibold text-slate-600">
+                #{item.requestNumber}
+              </span>
+              <AssistanceStatusBadge status={item.status} />
+              {item.priority && <PriorityBadge priority={item.priority} />}
+              {occupiedByOther && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                  Ocupada por {item.technicianName}
+                </span>
+              )}
+              {isMine && (
+                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                  En mis manos
+                </span>
+              )}
+            </div>
+
+            <div>
+              <h3 className="line-clamp-2 text-lg font-semibold text-slate-900">
+                {item.schoolName || item.tenantName || item.requesterName}
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                {typeLabels[item.assistanceType] ?? item.assistanceType} · {item.requesterName}
+              </p>
+            </div>
+
+            <div className="grid gap-3 text-sm text-slate-500 sm:grid-cols-3">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Solicitante</p>
+                <p className="font-medium text-slate-700">{item.requesterEmail}</p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Actualizado</p>
+                <p className="font-medium text-slate-700">
+                  {formatDistanceToNow(new Date(item.updatedAt), { addSuffix: true, locale: es })}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-slate-400">Programacion</p>
+                <p className="font-medium text-slate-700">
+                  {item.scheduledAt ? format(new Date(item.scheduledAt), "d MMM, HH:mm", { locale: es }) : "Sin programar"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-col gap-2 lg:w-[190px]">
+            {!item.assignedToId && openStatuses.includes(item.status) && (
+              <Button className="gap-2" onClick={() => onTake(item.id)}>
+                <UserRoundCheck className="h-4 w-4" />
+                Tomar solicitud
+              </Button>
+            )}
+            {isMine && item.status !== "completada" && item.status !== "cancelada" && item.status !== "rechazada" && (
+              <Button variant="secondary" className="gap-2" onClick={() => onComplete(item.id)}>
+                <CheckCircle2 className="h-4 w-4" />
+                Marcar completada
+              </Button>
+            )}
+            {busy && occupiedByOther && (
+              <Button variant="outline" disabled className="gap-2">
+                <Eye className="h-4 w-4" />
+                La gestiona otro
+              </Button>
+            )}
+            <Button variant="outline" className="gap-2" onClick={() => onOpen(item.id)}>
+              Abrir detalle
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AssistanceInboxPage() {
+  const { data: user } = useGetMe();
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     status: "all",
@@ -88,6 +191,7 @@ export default function AssistanceInboxPage() {
     dateFrom: "",
     dateTo: "",
   });
+  const [activeSupportTab, setActiveSupportTab] = useState("queue");
   const [selectedRequestId, setSelectedRequestId] = useState<number | null>(null);
   const [editState, setEditState] = useState({
     status: "pendiente",
@@ -203,17 +307,58 @@ export default function AssistanceInboxPage() {
 
   const rows = supportQuery.data?.data ?? [];
   const meta = metaQuery.data;
-  const groupedAgenda = useMemo(() => {
-    const groups = new Map<string, AssistanceSupportItem[]>();
-    for (const item of rows) {
-      const baseDate = item.scheduledAt || item.requestedAt || item.createdAt;
-      const key = format(new Date(baseDate), "yyyy-MM-dd");
-      const current = groups.get(key) ?? [];
-      current.push(item);
-      groups.set(key, current);
-    }
-    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [rows]);
+  const supportView = useMemo(() => {
+    const queue = rows.filter((item) => !item.assignedToId && openStatuses.includes(item.status));
+    const mine = rows.filter((item) => item.assignedToId === user?.id && openStatuses.includes(item.status));
+    const occupied = rows.filter((item) => !!item.assignedToId && item.assignedToId !== user?.id && openStatuses.includes(item.status));
+    const resolved = rows.filter((item) => ["completada", "cancelada", "rechazada"].includes(item.status));
+    return { queue, mine, occupied, resolved };
+  }, [rows, user?.id]);
+
+  const takeMutation = useMutation({
+    mutationFn: async (requestId: number) =>
+      customFetch(`/api/assistance/requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignedToId: user?.id,
+          status: "aceptada",
+        }),
+      }),
+    onSuccess: async () => {
+      toast({ title: "Solicitud tomada", description: "La asistencia ya queda asignada a tu bandeja." });
+      await queryClient.invalidateQueries({ queryKey: ["assistance-support"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "No se pudo tomar la solicitud",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: async (requestId: number) =>
+      customFetch(`/api/assistance/requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "completada",
+        }),
+      }),
+    onSuccess: async () => {
+      toast({ title: "Solicitud completada", description: "La asistencia se ha marcado como completada." });
+      await queryClient.invalidateQueries({ queryKey: ["assistance-support"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "No se pudo completar la solicitud",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo.",
+        variant: "destructive",
+      });
+    },
+  });
 
   function downloadIcs(requestId: number) {
     window.open(`/api/assistance/requests/${requestId}/ics`, "_blank");
@@ -229,7 +374,7 @@ export default function AssistanceInboxPage() {
               Bandeja de asistencias
             </div>
             <div>
-              <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Agenda operativa de soporte</h1>
+              <h1 className="text-4xl font-semibold tracking-tight text-slate-950">Bandeja de asistencias</h1>
               <p className="mt-2 max-w-3xl text-base text-slate-600">
                 Revisa solicitudes pendientes, programa asistencias, asigna tecnico y mantén trazabilidad clara para el
                 equipo de soporte Macmillan.
@@ -325,103 +470,128 @@ export default function AssistanceInboxPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="agenda" className="space-y-5">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="agenda">Agenda</TabsTrigger>
-          <TabsTrigger value="listado">Listado</TabsTrigger>
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="cursor-pointer border-0 bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-sm transition hover:scale-[1.01]" onClick={() => setActiveSupportTab("queue")}>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">Sin asignar</p>
+                <p className="mt-2 text-3xl font-bold">{supportView.queue.length}</p>
+              </div>
+              <Inbox className="h-8 w-8 text-white/70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer border-0 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm transition hover:scale-[1.01]" onClick={() => setActiveSupportTab("mine")}>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">Mis asistencias</p>
+                <p className="mt-2 text-3xl font-bold">{supportView.mine.length}</p>
+              </div>
+              <UserRoundCheck className="h-8 w-8 text-white/70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer border-0 bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm transition hover:scale-[1.01]" onClick={() => setActiveSupportTab("occupied")}>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">Ocupadas por otros</p>
+                <p className="mt-2 text-3xl font-bold">{supportView.occupied.length}</p>
+              </div>
+              <Eye className="h-8 w-8 text-white/70" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="cursor-pointer border-0 bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-sm transition hover:scale-[1.01]" onClick={() => setActiveSupportTab("resolved")}>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white/70">Cerradas</p>
+                <p className="mt-2 text-3xl font-bold">{supportView.resolved.length}</p>
+              </div>
+              <CheckCircle2 className="h-8 w-8 text-white/70" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs value={activeSupportTab} onValueChange={setActiveSupportTab} className="space-y-4">
+        <TabsList className="h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
+          <TabsTrigger value="queue">Pendientes sin asignar</TabsTrigger>
+          <TabsTrigger value="mine">Mis asistencias</TabsTrigger>
+          <TabsTrigger value="occupied">Ocupadas por otros</TabsTrigger>
+          <TabsTrigger value="resolved">Cerradas</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="agenda" className="space-y-4">
-          {supportQuery.isLoading ? (
-            <Card className="rounded-[1.75rem] border-slate-200/80 shadow-sm">
-              <CardContent className="px-6 py-10 text-center text-sm text-slate-500">Cargando agenda...</CardContent>
-            </Card>
-          ) : groupedAgenda.length === 0 ? (
-            <Card className="rounded-[1.75rem] border-slate-200/80 shadow-sm">
-              <CardContent className="px-6 py-10 text-center text-sm text-slate-500">No hay asistencias para los filtros seleccionados.</CardContent>
-            </Card>
+        <TabsContent value="queue" className="space-y-4">
+          {supportView.queue.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-slate-500">No hay solicitudes pendientes sin asignar con los filtros actuales.</CardContent></Card>
           ) : (
-            groupedAgenda.map(([dateKey, items]) => (
-              <Card key={dateKey} className="rounded-[1.75rem] border-slate-200/80 shadow-lg shadow-slate-200/30">
-                <CardHeader>
-                  <CardTitle className="text-xl">
-                    {format(new Date(`${dateKey}T00:00:00`), "EEEE d 'de' MMMM", { locale: es })}
-                  </CardTitle>
-                  <CardDescription>{items.length} solicitud(es) previstas o registradas en esta fecha.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {items.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setSelectedRequestId(item.id)}
-                      className="grid w-full gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left shadow-sm transition hover:border-indigo-200 hover:bg-indigo-50/30 lg:grid-cols-[130px_1fr_180px_160px]"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">
-                          {item.scheduledAt ? format(new Date(item.scheduledAt), "HH:mm") : "Sin hora"}
-                        </p>
-                        <p className="text-xs text-slate-500">{typeLabels[item.assistanceType] ?? item.assistanceType}</p>
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-900">{item.schoolName || item.tenantName || item.requesterName}</p>
-                        <p className="mt-1 text-sm text-slate-500">{item.requesterName}</p>
-                        <p className="mt-1 text-sm text-slate-500">{item.requestNumber}</p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <AssistanceStatusBadge status={item.status} />
-                        {item.priority && <PriorityBadge priority={item.priority} />}
-                      </div>
-                      <div className="text-sm text-slate-600">
-                        <p className="font-medium text-slate-800">{item.technicianName || "Sin asignar"}</p>
-                        <p className="mt-1">{item.requesterEmail}</p>
-                      </div>
-                    </button>
-                  ))}
-                </CardContent>
-              </Card>
+            supportView.queue.map((item) => (
+              <SupportAssistanceCard
+                key={item.id}
+                item={item}
+                currentUserId={user?.id ?? 0}
+                onTake={(requestId) => takeMutation.mutate(requestId)}
+                onComplete={(requestId) => completeMutation.mutate(requestId)}
+                onOpen={setSelectedRequestId}
+              />
             ))
           )}
         </TabsContent>
 
-        <TabsContent value="listado">
-          <Card className="rounded-[1.75rem] border-slate-200/80 shadow-lg shadow-slate-200/30">
-            <CardHeader>
-              <CardTitle>Listado de solicitudes</CardTitle>
-              <CardDescription>Vista rapida para revisar cola, asignaciones y estado.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {supportQuery.isLoading ? (
-                <div className="px-6 py-10 text-center text-sm text-slate-500">Cargando solicitudes...</div>
-              ) : rows.length === 0 ? (
-                <div className="px-6 py-10 text-center text-sm text-slate-500">No hay resultados para los filtros seleccionados.</div>
-              ) : (
-                rows.map((item) => (
-                  <div key={item.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm lg:grid-cols-[1.3fr_0.9fr_0.8fr_0.7fr_auto]">
-                    <div>
-                      <p className="font-semibold text-slate-900">{item.requestNumber}</p>
-                      <p className="mt-1 text-sm text-slate-600">{item.schoolName || item.tenantName || "-"}</p>
-                      <p className="mt-1 text-sm text-slate-500">{item.requesterName}</p>
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      <p>{typeLabels[item.assistanceType] ?? item.assistanceType}</p>
-                      <p className="mt-1">{item.scheduledAt ? format(new Date(item.scheduledAt), "d MMM, HH:mm", { locale: es }) : "Sin programar"}</p>
-                    </div>
-                    <div className="flex flex-wrap items-start gap-2">
-                      <AssistanceStatusBadge status={item.status} />
-                      {item.priority && <PriorityBadge priority={item.priority} />}
-                    </div>
-                    <div className="text-sm text-slate-600">
-                      <p>{item.technicianName || "Sin asignar"}</p>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button variant="outline" onClick={() => setSelectedRequestId(item.id)}>Abrir detalle</Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+        <TabsContent value="mine" className="space-y-4">
+          {supportView.mine.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-slate-500">Todavia no tienes asistencias tomadas.</CardContent></Card>
+          ) : (
+            supportView.mine.map((item) => (
+              <SupportAssistanceCard
+                key={item.id}
+                item={item}
+                currentUserId={user?.id ?? 0}
+                onTake={(requestId) => takeMutation.mutate(requestId)}
+                onComplete={(requestId) => completeMutation.mutate(requestId)}
+                onOpen={setSelectedRequestId}
+              />
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="occupied" className="space-y-4">
+          {supportView.occupied.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-slate-500">No hay asistencias ocupadas por otros tecnicos ahora mismo.</CardContent></Card>
+          ) : (
+            supportView.occupied.map((item) => (
+              <SupportAssistanceCard
+                key={item.id}
+                item={item}
+                currentUserId={user?.id ?? 0}
+                onTake={(requestId) => takeMutation.mutate(requestId)}
+                onComplete={(requestId) => completeMutation.mutate(requestId)}
+                onOpen={setSelectedRequestId}
+                busy
+              />
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="resolved" className="space-y-4">
+          {supportView.resolved.length === 0 ? (
+            <Card><CardContent className="p-8 text-center text-slate-500">No hay asistencias cerradas con los filtros actuales.</CardContent></Card>
+          ) : (
+            supportView.resolved.map((item) => (
+              <SupportAssistanceCard
+                key={item.id}
+                item={item}
+                currentUserId={user?.id ?? 0}
+                onTake={(requestId) => takeMutation.mutate(requestId)}
+                onComplete={(requestId) => completeMutation.mutate(requestId)}
+                onOpen={setSelectedRequestId}
+              />
+            ))
+          )}
         </TabsContent>
       </Tabs>
 
