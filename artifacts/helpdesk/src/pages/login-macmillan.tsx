@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BookOpenText, Eye, GraduationCap, Headphones, Loader2, Lock, Mail, Ticket, UserRoundCheck } from "lucide-react";
+import { BookOpenText, Eye, GraduationCap, Loader2, Lock, Mail, PlugZap, Ticket, UserRoundCheck } from "lucide-react";
 import { getDefaultRouteForRole } from "@/lib/default-route";
 import meeLogo from "@/assets/mee-logo.svg";
 
@@ -30,14 +30,9 @@ type CaptchaChallenge = {
 
 const featureItems = [
   {
-    icon: Headphones,
-    title: "Soporte",
-    description: "Atencion rapida\ny eficaz",
-  },
-  {
     icon: Ticket,
-    title: "Gestion de tickets",
-    description: "Seguimiento y control\nde incidencias",
+    title: "Soporte",
+    description: "Tickets de consultas,\natencion rapida.",
   },
   {
     icon: BookOpenText,
@@ -46,13 +41,18 @@ const featureItems = [
   },
   {
     icon: UserRoundCheck,
-    title: "Visitas tecnicas",
+    title: "Solicitud de asistencia",
     description: "Planificacion y gestion\nde intervenciones",
   },
   {
     icon: GraduationCap,
     title: "Formacion",
     description: "Capacitacion y\ncontenidos formativos",
+  },
+  {
+    icon: PlugZap,
+    title: "API externa",
+    description: "Conexion segura con\nnuestros sistemas",
   },
 ];
 
@@ -205,8 +205,8 @@ export default function MacmillanLogin() {
                   <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-[#0b2b5b] shadow-sm">
                     <Icon className="h-7 w-7" strokeWidth={1.9} />
                   </div>
-                  <h3 className="text-[28px] font-semibold leading-tight text-[#0b2b5b] lg:text-[30px]">{title}</h3>
-                  <p className="mt-3 whitespace-pre-line text-base leading-8 text-slate-600 lg:text-[20px]">
+                  <h3 className="text-[20px] font-semibold leading-tight text-[#0b2b5b] lg:text-[22px]">{title}</h3>
+                  <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600 lg:text-[16px]">
                     {description}
                   </p>
                 </div>
