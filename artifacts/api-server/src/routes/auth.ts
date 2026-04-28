@@ -3,8 +3,8 @@ import type { Request, Response } from "express";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { schoolsTable, usersTable, tenantsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { schoolsTable, ticketsTable, usersTable, tenantsTable } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 import {
   requireAuth,
   verifyPassword,
@@ -16,7 +16,6 @@ import {
 import { createAuditLog } from "../lib/audit.js";
 import { parseDbJson } from "../lib/db-json.js";
 import { logger } from "../lib/logger.js";
-import { sendSupportContactEmail } from "../lib/support-contact-email.js";
 
 const router = Router();
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -73,6 +72,12 @@ function buildResetPasswordUrl(req: Request, token: string) {
   return `${frontendUrl.replace(/\/?$/, "/")}reset-password?token=${encodeURIComponent(token)}`;
 }
 
+function generateTicketNumber() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `TKT-${timestamp}-${random}`;
+}
+
 function signCaptchaPayload(payload: string) {
   return crypto.createHmac("sha256", getCaptchaSecret()).update(payload).digest("base64url");
 }
@@ -121,6 +126,96 @@ function sendInvalidLoginResponse(res: Response, status: number, captchaRequired
     captchaRequired,
     captcha: captchaRequired ? createCaptchaChallenge() : undefined,
   });
+}
+
+async function resolveSupportContactScope(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const matchedUsers = await db
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      email: usersTable.email,
+      tenantId: usersTable.tenantId,
+      schoolId: usersTable.schoolId,
+      active: usersTable.active,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.email, normalizedEmail))
+    .limit(1);
+
+  const matchedUser = matchedUsers[0];
+  if (matchedUser?.active && matchedUser.tenantId) {
+    return {
+      tenantId: matchedUser.tenantId,
+      schoolId: matchedUser.schoolId ?? null,
+      createdById: matchedUser.id,
+      requesterName: matchedUser.name,
+    };
+  }
+
+  const envTenantId = Number(process.env["SUPPORT_CONTACT_TENANT_ID"] || "");
+  const envSchoolId = Number(process.env["SUPPORT_CONTACT_SCHOOL_ID"] || "");
+  const envFallbackUserId = Number(process.env["SUPPORT_CONTACT_FALLBACK_USER_ID"] || "");
+
+  if (!Number.isNaN(envFallbackUserId) && envFallbackUserId > 0) {
+    const fallbackUsers = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        tenantId: usersTable.tenantId,
+        schoolId: usersTable.schoolId,
+        active: usersTable.active,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, envFallbackUserId))
+      .limit(1);
+
+    const fallbackUser = fallbackUsers[0];
+    if (fallbackUser?.active && (fallbackUser.tenantId || envTenantId > 0)) {
+      return {
+        tenantId: fallbackUser.tenantId ?? envTenantId,
+        schoolId: !Number.isNaN(envSchoolId) && envSchoolId > 0 ? envSchoolId : (fallbackUser.schoolId ?? null),
+        createdById: fallbackUser.id,
+        requesterName: matchedUser?.name ?? null,
+      };
+    }
+  }
+
+  const supportUsers = await db
+    .select({
+      id: usersTable.id,
+      tenantId: usersTable.tenantId,
+      schoolId: usersTable.schoolId,
+    })
+    .from(usersTable)
+    .where(
+      and(
+        eq(usersTable.active, true),
+        eq(usersTable.role, "tecnico"),
+      ),
+    )
+    .limit(1);
+
+  const supportUser = supportUsers[0];
+  if (supportUser?.tenantId) {
+    return {
+      tenantId: supportUser.tenantId,
+      schoolId: !Number.isNaN(envSchoolId) && envSchoolId > 0 ? envSchoolId : (supportUser.schoolId ?? null),
+      createdById: supportUser.id,
+      requesterName: matchedUser?.name ?? null,
+    };
+  }
+
+  if (!Number.isNaN(envTenantId) && envTenantId > 0 && !Number.isNaN(envFallbackUserId) && envFallbackUserId > 0) {
+    return {
+      tenantId: envTenantId,
+      schoolId: !Number.isNaN(envSchoolId) && envSchoolId > 0 ? envSchoolId : null,
+      createdById: envFallbackUserId,
+      requesterName: matchedUser?.name ?? null,
+    };
+  }
+
+  return null;
 }
 
 async function auditLoginSecurityEvent(params: {
@@ -461,41 +556,84 @@ router.post("/support-contact", async (req, res) => {
     res.status(400).json({ error: "ValidationError", message: "Revisa los datos del formulario de contacto." });
     return;
   }
-
-  const recipient = process.env["SUPPORT_CONTACT_EMAIL"] || "javier.alexander@macmillaneducation.com";
+  const scope = await resolveSupportContactScope(parsed.data.email);
+  if (!scope?.tenantId) {
+    logger.error(
+      { requesterEmail: parsed.data.email.toLowerCase(), ip: getClientIp(req) },
+      "Support contact ticket scope could not be resolved",
+    );
+    res.status(503).json({ error: "SupportNotConfigured", message: "El servicio de soporte no esta disponible ahora mismo." });
+    return;
+  }
 
   try {
-    const result = await sendSupportContactEmail({
-      recipient,
-      requesterName: parsed.data.name,
-      requesterEmail: parsed.data.email.toLowerCase(),
-      requesterPhone: parsed.data.phone || null,
-      schoolName: parsed.data.schoolName || null,
-      subject: parsed.data.subject || "Solicitud de ayuda desde login",
-      message: parsed.data.message,
-    });
+    const ticketNumber = generateTicketNumber();
+    const description = [
+      "Solicitud creada desde la pantalla de acceso de Bridge.",
+      "",
+      `Nombre: ${parsed.data.name}`,
+      `Email: ${parsed.data.email.toLowerCase()}`,
+      `Telefono: ${parsed.data.phone || "-"}`,
+      `Colegio o centro: ${parsed.data.schoolName || "-"}`,
+      "",
+      "Mensaje:",
+      parsed.data.message,
+    ].join("\n");
 
-    if (!result.sent) {
-      logger.error(
-        { recipient, requesterEmail: parsed.data.email.toLowerCase(), reason: result.reason, ip: getClientIp(req) },
-        "Support contact email skipped",
-      );
-      res.status(503).json({ error: "MailNotConfigured", message: "El servicio de soporte no esta disponible ahora mismo." });
-      return;
+    await db.insert(ticketsTable).values({
+      ticketNumber,
+      title: `[Acceso] ${parsed.data.subject}`,
+      description,
+      status: "nuevo",
+      priority: "media",
+      category: "contacto_soporte_login",
+      tenantId: scope.tenantId,
+      schoolId: scope.schoolId ?? null,
+      createdById: scope.createdById,
+      customFields: JSON.stringify({
+        source: "login_support_contact",
+        requesterName: parsed.data.name,
+        requesterEmail: parsed.data.email.toLowerCase(),
+        requesterPhone: parsed.data.phone || null,
+        requesterSchoolName: parsed.data.schoolName || null,
+        submittedAt: new Date().toISOString(),
+      }),
+    } as any);
+
+    const createdTickets = await db
+      .select({ id: ticketsTable.id })
+      .from(ticketsTable)
+      .where(eq(ticketsTable.ticketNumber, ticketNumber))
+      .limit(1);
+
+    const createdTicket = createdTickets[0];
+    if (createdTicket) {
+      await createAuditLog({
+        action: "create",
+        entityType: "ticket",
+        entityId: createdTicket.id,
+        userId: scope.createdById,
+        tenantId: scope.tenantId,
+        newValues: {
+          source: "login_support_contact",
+          requesterEmail: parsed.data.email.toLowerCase(),
+          requesterName: parsed.data.name,
+        },
+      });
     }
 
     logger.info(
-      { recipient, requesterEmail: parsed.data.email.toLowerCase(), via: result.via, ip: getClientIp(req) },
-      "Support contact email sent",
+      { requesterEmail: parsed.data.email.toLowerCase(), ticketNumber, tenantId: scope.tenantId, ip: getClientIp(req) },
+      "Support contact ticket created",
     );
 
-    res.json({ message: "Tu mensaje se ha enviado correctamente al equipo de soporte." });
+    res.json({ message: `Tu solicitud se ha registrado correctamente con el numero ${ticketNumber}.`, ticketNumber });
   } catch (error) {
     logger.error(
-      { err: error, recipient, requesterEmail: parsed.data.email.toLowerCase(), ip: getClientIp(req) },
-      "Support contact email failed",
+      { err: error, requesterEmail: parsed.data.email.toLowerCase(), ip: getClientIp(req) },
+      "Support contact ticket creation failed",
     );
-    res.status(500).json({ error: "InternalServerError", message: "No se pudo enviar tu mensaje en este momento." });
+    res.status(500).json({ error: "InternalServerError", message: "No se pudo registrar tu solicitud en este momento." });
   }
 });
 

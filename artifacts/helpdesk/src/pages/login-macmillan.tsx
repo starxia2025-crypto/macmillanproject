@@ -190,13 +190,13 @@ export default function MacmillanLogin() {
     onSuccess: (response) => {
       setSupportSent(true);
       toast({
-        title: "Mensaje enviado",
+        title: "Solicitud registrada",
         description: response.message,
       });
     },
     onError: (error) => {
       toast({
-        title: "No se pudo enviar el mensaje",
+        title: "No se pudo registrar la solicitud",
         description: error instanceof Error ? error.message : "Intentalo de nuevo en unos minutos.",
         variant: "destructive",
       });
@@ -479,14 +479,14 @@ export default function MacmillanLogin() {
             <DialogHeader>
               <DialogTitle>Contactar con soporte</DialogTitle>
               <DialogDescription>
-                Rellena este formulario y enviaremos tu mensaje al equipo de soporte de Macmillan.
+                Rellena este formulario y registraremos una consulta para que el equipo de soporte la vea directamente en Bridge.
               </DialogDescription>
             </DialogHeader>
 
             {supportSent ? (
               <div className="space-y-4">
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-5 text-sm text-emerald-800">
-                  Tu mensaje se ha enviado correctamente a soporte. Te responderan lo antes posible.
+                  Tu solicitud se ha registrado correctamente en el sistema de soporte. El equipo la revisara lo antes posible.
                 </div>
                 <DialogFooter>
                   <Button type="button" onClick={() => setSupportDialogOpen(false)}>
@@ -601,7 +601,7 @@ export default function MacmillanLogin() {
                           Enviando...
                         </>
                       ) : (
-                        "Enviar mensaje"
+                        "Registrar solicitud"
                       )}
                     </Button>
                   </DialogFooter>
