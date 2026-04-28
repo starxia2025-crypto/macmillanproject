@@ -7,20 +7,8 @@ import { useLogin } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import {
-  BookOpenText,
-  CheckCircle2,
-  GraduationCap,
-  Headphones,
-  Loader2,
-  Lock,
-  Mail,
-  ShieldCheck,
-  Ticket,
-} from "lucide-react";
-import { motion } from "framer-motion";
+import { BookOpenText, Eye, GraduationCap, Headphones, Loader2, Lock, Mail, Ticket, UserRoundCheck } from "lucide-react";
 import { getDefaultRouteForRole } from "@/lib/default-route";
 import meeLogo from "@/assets/mee-logo.svg";
 
@@ -40,26 +28,31 @@ type CaptchaChallenge = {
   token: string;
 };
 
-const valueCards = [
+const featureItems = [
   {
     icon: Headphones,
     title: "Soporte",
-    description: "Atencion agil y acompanamiento cercano para cada incidencia.",
+    description: "Atencion rapida\ny eficaz",
   },
   {
     icon: Ticket,
-    title: "Tickets",
-    description: "Seguimiento claro de solicitudes, estados y prioridades.",
+    title: "Gestion de tickets",
+    description: "Seguimiento y control\nde incidencias",
   },
   {
     icon: BookOpenText,
     title: "Recursos",
-    description: "Guias, documentacion y conocimiento siempre a mano.",
+    description: "Acceso a guias,\ndocumentacion y mas",
+  },
+  {
+    icon: UserRoundCheck,
+    title: "Visitas tecnicas",
+    description: "Planificacion y gestion\nde intervenciones",
   },
   {
     icon: GraduationCap,
     title: "Formacion",
-    description: "Visitas, capacitacion y continuidad para los centros.",
+    description: "Capacitacion y\ncontenidos formativos",
   },
 ];
 
@@ -88,10 +81,31 @@ function writeRecentLoginEmails(email: string) {
   return nextEmails;
 }
 
+function BridgeWordmark() {
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-6 lg:gap-8">
+        <div className="relative h-[120px] w-[220px] shrink-0 lg:h-[150px] lg:w-[270px]">
+          <div className="absolute left-[22px] top-[8px] h-[78px] w-[18px] rounded-full bg-[#0b2b5b] lg:left-[26px] lg:h-[94px] lg:w-[20px]" />
+          <div className="absolute left-[88px] top-[8px] h-[78px] w-[18px] rounded-full bg-[#ff4a43] lg:left-[106px] lg:h-[94px] lg:w-[20px]" />
+          <div className="absolute left-0 top-[46px] h-[66px] w-[130px] rounded-[999px] border-[12px] border-r-0 border-[#0b2b5b] lg:top-[54px] lg:h-[82px] lg:w-[160px] lg:border-[13px]" />
+          <div className="absolute left-[68px] top-[46px] h-[66px] w-[130px] rounded-[999px] border-[12px] border-l-0 border-[#ff6b57] lg:left-[84px] lg:top-[54px] lg:h-[82px] lg:w-[160px] lg:border-[13px]" />
+        </div>
+
+        <div>
+          <h1 className="text-[78px] font-bold leading-none tracking-tight text-[#0b2b5b] lg:text-[112px]">Bridge</h1>
+          <p className="mt-4 text-[30px] font-medium leading-tight text-slate-500 lg:text-[40px]">
+            Plataforma de soporte y servicios
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MacmillanLogin() {
   const [, setLocation] = useLocation();
   const passwordInputRef = useRef<HTMLInputElement | null>(null);
-  const [recentLoginEmails, setRecentLoginEmails] = useState<string[]>([]);
   const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge | null>(null);
 
   const form = useForm<LoginFormValues>({
@@ -106,10 +120,9 @@ export default function MacmillanLogin() {
         form.setValue("captchaAnswer", "");
 
         if (form.getValues("rememberMe")) {
-          setRecentLoginEmails(writeRecentLoginEmails(form.getValues("email")));
+          writeRecentLoginEmails(form.getValues("email"));
         } else {
           window.localStorage.removeItem(RECENT_LOGIN_EMAILS_STORAGE_KEY);
-          setRecentLoginEmails([]);
         }
 
         setLocation(response.mustChangePassword ? "/change-password" : getDefaultRouteForRole(response.role));
@@ -126,7 +139,6 @@ export default function MacmillanLogin() {
 
   useEffect(() => {
     const emails = readRecentLoginEmails();
-    setRecentLoginEmails(emails);
     if (emails[0] && !form.getValues("email")) {
       form.setValue("email", emails[0], { shouldValidate: false });
     }
@@ -148,16 +160,6 @@ export default function MacmillanLogin() {
     });
   }
 
-  function selectRecentLoginEmail(email: string) {
-    form.setValue("email", email, { shouldDirty: true, shouldValidate: true });
-    passwordInputRef.current?.focus();
-  }
-
-  function clearRecentLoginEmails() {
-    window.localStorage.removeItem(RECENT_LOGIN_EMAILS_STORAGE_KEY);
-    setRecentLoginEmails([]);
-  }
-
   function getLoginErrorMessage() {
     const rawMessage = loginMutation.error?.message || "";
 
@@ -177,261 +179,193 @@ export default function MacmillanLogin() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(239,68,68,0.10),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(37,99,235,0.12),_transparent_32%),linear-gradient(180deg,_#f8fafc_0%,_#eef3f9_100%)]">
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.025)_1px,transparent_1px)] bg-[size:32px_32px]" />
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.98),_rgba(243,246,252,0.92)_42%,_rgba(235,240,247,0.96)_100%)] text-slate-900">
+      <div className="mx-auto flex min-h-screen max-w-[1720px] flex-col px-5 pt-5 lg:px-8 lg:pt-6">
+        <div className="grid flex-1 gap-8 lg:grid-cols-[minmax(0,1fr)_560px] lg:gap-10">
+          <section className="flex flex-col justify-between px-3 py-8 lg:px-8 lg:py-10">
+            <div>
+              <BridgeWordmark />
 
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1440px] flex-col px-6 py-6 lg:px-10 lg:py-8">
-        <div className="grid min-h-[calc(100vh-3rem)] gap-8 lg:grid-cols-[minmax(0,1.08fr)_480px]">
-          <section className="relative overflow-hidden rounded-[32px] border border-white/70 bg-white/76 p-7 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.35)] backdrop-blur xl:p-10">
-            <div className="absolute -left-24 top-8 h-56 w-56 rounded-full bg-[#ef4444]/12 blur-3xl" />
-            <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-[#0f274d]/10 blur-3xl" />
-
-            <div className="relative flex h-full flex-col">
-              <div className="flex items-center gap-4">
-                <div className="flex h-16 w-16 items-center justify-center rounded-[22px] bg-white shadow-[0_20px_45px_-28px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80">
-                  <img src={meeLogo} alt="Macmillan Education" className="h-10 w-auto object-contain" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-400">Bridge</p>
-                  <p className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Plataforma de soporte y servicios</p>
-                </div>
-              </div>
-
-              <div className="mt-12 max-w-3xl">
-                <motion.h1
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45 }}
-                  className="text-4xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-5xl xl:text-6xl"
-                >
+              <div className="mt-14 max-w-[860px] lg:mt-16">
+                <h2 className="text-4xl font-bold leading-[1.1] tracking-tight text-[#0b2b5b] lg:text-[64px]">
                   Conectamos a las personas.
-                  <span className="mt-2 block text-[#ef4444]">Impulsamos soluciones.</span>
-                </motion.h1>
+                  <span className="mt-2 block text-[#ff4a43]">Impulsamos soluciones.</span>
+                </h2>
 
-                <motion.p
-                  initial={{ opacity: 0, y: 18 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.45, delay: 0.08 }}
-                  className="mt-6 max-w-2xl text-lg leading-8 text-slate-600"
-                >
-                  Bridge centraliza el soporte de Macmillan Education para clientes, colegios y equipos internos en
-                  un espacio claro, agil y preparado para el seguimiento diario.
-                </motion.p>
+                <p className="mt-8 max-w-[760px] text-xl leading-[1.65] text-slate-600 lg:text-[25px]">
+                  Bridge es la plataforma central de soporte y servicios de Macmillan Education. Un puente entre
+                  clientes, equipos y soluciones para ofrecer una experiencia agil, cercana y eficiente.
+                </p>
               </div>
+            </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/88 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
-                  <ShieldCheck className="h-4 w-4 text-[#0f274d]" />
-                  Acceso seguro
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/88 px-4 py-2 text-sm font-medium text-slate-700 shadow-sm">
-                  <CheckCircle2 className="h-4 w-4 text-[#ef4444]" />
-                  Soporte centralizado
-                </div>
-              </div>
-
-              <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                {valueCards.map(({ icon: Icon, title, description }) => (
-                  <div
-                    key={title}
-                    className="rounded-[24px] border border-slate-200/80 bg-white/82 p-5 shadow-[0_18px_50px_-38px_rgba(15,23,42,0.45)] backdrop-blur"
-                  >
-                    <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+            <div className="mt-12 grid gap-6 border-t border-slate-200/90 pt-8 md:grid-cols-3 xl:grid-cols-5">
+              {featureItems.map(({ icon: Icon, title, description }) => (
+                <div key={title} className="relative px-2 xl:px-4">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-slate-200 bg-white text-[#0b2b5b] shadow-sm">
+                    <Icon className="h-7 w-7" strokeWidth={1.9} />
                   </div>
-                ))}
-              </div>
-
-              <div className="mt-auto hidden pt-10 text-sm text-slate-500 lg:block">
-                <div className="flex items-center justify-between gap-4 border-t border-slate-200/80 pt-6">
-                  <span>Macmillan Education</span>
-                  <span>bridge.macmillan.es</span>
-                  <span>© {new Date().getFullYear()} Todos los derechos reservados.</span>
+                  <h3 className="text-[28px] font-semibold leading-tight text-[#0b2b5b] lg:text-[30px]">{title}</h3>
+                  <p className="mt-3 whitespace-pre-line text-base leading-8 text-slate-600 lg:text-[20px]">
+                    {description}
+                  </p>
                 </div>
-              </div>
+              ))}
             </div>
           </section>
 
-          <aside className="flex items-center justify-center">
-            <div className="w-full rounded-[32px] border border-white/80 bg-white/88 p-7 shadow-[0_32px_80px_-48px_rgba(15,23,42,0.4)] backdrop-blur sm:p-9">
-              <div className="mb-8 flex items-center gap-4 lg:hidden">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-slate-50 ring-1 ring-slate-200">
-                  <img src={meeLogo} alt="Macmillan Education" className="h-8 w-auto object-contain" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-400">Bridge</p>
-                  <p className="text-lg font-semibold text-slate-950">Plataforma de soporte</p>
-                </div>
-              </div>
-
+          <aside className="flex items-center justify-center py-4 lg:py-8">
+            <div className="w-full rounded-[30px] border border-slate-200/70 bg-white/92 p-8 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.28)] lg:p-12">
               <div className="text-center">
-                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Bienvenido</h2>
-                <p className="mt-3 text-base text-slate-500">Inicia sesion para continuar</p>
+                <h3 className="text-5xl font-bold tracking-tight text-[#0b2b5b] lg:text-[62px]">Bienvenido</h3>
+                <p className="mt-4 text-2xl text-slate-500 lg:text-[24px]">Inicia sesion para continuar</p>
               </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="mt-8 space-y-6">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="mt-12 space-y-7">
                   {loginMutation.isError && (
                     <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                       {getLoginErrorMessage()}
                     </div>
                   )}
 
-                  <div className="space-y-5">
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel className="text-sm font-semibold text-slate-700">Correo electronico</FormLabel>
-                          <FormControl>
-                            <div className="relative">
-                              <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                              <Input
-                                placeholder="usuario@macmillan.com"
-                                {...field}
-                                className="h-14 rounded-2xl border-slate-200 bg-white pl-12 text-base shadow-none"
-                              />
-                            </div>
-                          </FormControl>
-                          {recentLoginEmails.length > 0 && (
-                            <div className="pt-2">
-                              <div className="mb-2 flex items-center justify-between gap-3">
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
-                                  Usuarios recientes
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={clearRecentLoginEmails}
-                                  className="text-xs font-medium text-slate-400 transition-colors hover:text-slate-700"
-                                >
-                                  Limpiar
-                                </button>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {recentLoginEmails.map((email) => (
-                                  <button
-                                    key={email}
-                                    type="button"
-                                    onClick={() => selectRecentLoginEmail(email)}
-                                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-white"
-                                  >
-                                    {email}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="password"
-                      render={({ field }) => (
-                        <FormItem>
-                          <div className="flex items-center justify-between gap-4">
-                            <FormLabel className="text-sm font-semibold text-slate-700">Contrasena</FormLabel>
-                            <Link href="/forgot-password">
-                              <span className="cursor-pointer text-sm font-medium text-[#2563eb] hover:underline">
-                                Has olvidado tu contrasena?
-                              </span>
-                            </Link>
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-lg font-semibold text-[#0b2b5b] lg:text-[20px]">
+                          Correo electronico
+                        </FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Mail className="pointer-events-none absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400" />
+                            <Input
+                              placeholder="usuario@macmillan.com"
+                              {...field}
+                              className="h-[66px] rounded-2xl border-slate-200 pl-16 text-xl text-slate-700 placeholder:text-slate-400"
+                            />
                           </div>
-                          <FormControl>
-                            <div className="relative">
-                              <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-lg font-semibold text-[#0b2b5b] lg:text-[20px]">Contrasena</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <Lock className="pointer-events-none absolute left-5 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400" />
+                            <Input
+                              type="password"
+                              placeholder="••••••••••"
+                              {...field}
+                              ref={(element) => {
+                                field.ref(element);
+                                passwordInputRef.current = element;
+                              }}
+                              className="h-[66px] rounded-2xl border-slate-200 pl-16 pr-16 text-xl text-slate-700 placeholder:text-slate-400"
+                            />
+                            <Eye className="pointer-events-none absolute right-5 top-1/2 h-6 w-6 -translate-y-1/2 text-slate-400" />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {captchaChallenge && (
+                    <FormField
+                      control={form.control}
+                      name="captchaAnswer"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-lg font-semibold text-[#0b2b5b] lg:text-[20px]">
+                            Verificacion de seguridad
+                          </FormLabel>
+                          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                            <p className="mb-3 text-base font-medium text-amber-900">
+                              Resuelve para continuar: <span className="font-bold">{captchaChallenge.question}</span>
+                            </p>
+                            <FormControl>
                               <Input
-                                type="password"
-                                placeholder="••••••••••"
+                                inputMode="numeric"
+                                placeholder="Resultado"
                                 {...field}
-                                ref={(element) => {
-                                  field.ref(element);
-                                  passwordInputRef.current = element;
-                                }}
-                                className="h-14 rounded-2xl border-slate-200 bg-white pl-12 text-base shadow-none"
+                                className="h-14 rounded-xl border-amber-200 bg-white text-lg"
                               />
-                            </div>
-                          </FormControl>
+                            </FormControl>
+                          </div>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                  )}
 
-                    {captchaChallenge && (
-                      <FormField
-                        control={form.control}
-                        name="captchaAnswer"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-sm font-semibold text-slate-700">Verificacion de seguridad</FormLabel>
-                            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                              <p className="mb-3 text-sm font-medium text-amber-900">
-                                Resuelve para continuar: <span className="font-bold">{captchaChallenge.question}</span>
-                              </p>
-                              <FormControl>
-                                <Input
-                                  inputMode="numeric"
-                                  placeholder="Resultado"
-                                  {...field}
-                                  className="h-12 rounded-xl border-amber-200 bg-white"
-                                />
-                              </FormControl>
-                            </div>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-4 text-sm">
+                  <div className="flex flex-col gap-4 text-base text-slate-600 sm:flex-row sm:items-center sm:justify-between">
                     <FormField
                       control={form.control}
                       name="rememberMe"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center space-x-3 space-y-0">
+                        <FormItem className="flex flex-row items-center gap-3 space-y-0">
                           <FormControl>
-                            <Checkbox checked={field.value} onCheckedChange={(checked) => field.onChange(Boolean(checked))} />
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={(checked) => field.onChange(Boolean(checked))}
+                              className="h-6 w-6 rounded-md border-slate-300"
+                            />
                           </FormControl>
-                          <FormLabel className="cursor-pointer font-medium text-slate-600">Recordarme</FormLabel>
+                          <FormLabel className="cursor-pointer text-lg font-medium text-slate-700">Recordarme</FormLabel>
                         </FormItem>
                       )}
                     />
-                    <span className="text-slate-400">Acceso para usuarios autorizados</span>
+
+                    <Link href="/forgot-password">
+                      <span className="cursor-pointer text-lg font-medium text-[#2563eb] hover:underline">
+                        Olvidaste tu contrasena?
+                      </span>
+                    </Link>
                   </div>
 
                   <Button
                     type="submit"
-                    className="h-14 w-full rounded-2xl bg-[#0f274d] text-base font-semibold text-white transition hover:bg-[#102f5d]"
+                    className="h-[68px] w-full rounded-2xl bg-[#062a58] text-2xl font-semibold text-white hover:bg-[#0b3267]"
                     disabled={loginMutation.isPending}
                   >
                     {loginMutation.isPending ? (
                       <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Iniciando sesion...
+                        <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                        Iniciando sesion
                       </>
                     ) : (
                       "Iniciar sesion"
                     )}
                   </Button>
 
-                  <div className="space-y-4 pt-1">
-                    <Separator className="bg-slate-200" />
-                    <p className="text-center text-sm leading-6 text-slate-500">
-                      Necesitas ayuda? Contacta con el <span className="font-medium text-[#2563eb]">equipo de soporte</span>.
-                    </p>
-                  </div>
+                  <p className="pt-6 text-center text-lg leading-8 text-slate-600">
+                    Necesitas ayuda? Contacta con el <span className="font-medium text-[#2563eb]">equipo de soporte</span>
+                  </p>
                 </form>
               </Form>
             </div>
           </aside>
         </div>
+
+        <footer className="mt-4 rounded-t-[18px] bg-[#062a58] px-6 py-5 text-white lg:px-10">
+          <div className="flex flex-col items-center justify-between gap-4 text-center text-base lg:flex-row lg:text-left lg:text-[20px]">
+            <div className="flex items-center gap-3">
+              <img src={meeLogo} alt="Macmillan Education" className="h-9 w-auto brightness-0 invert" />
+              <span className="text-lg font-medium lg:text-[19px]">macmillan education</span>
+            </div>
+            <span className="font-medium">bridge.macmillan.es</span>
+            <span>© 2024 Macmillan Education. Todos los derechos reservados.</span>
+          </div>
+        </footer>
       </div>
     </div>
   );
