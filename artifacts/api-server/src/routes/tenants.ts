@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { schoolsTable, tenantsTable, ticketsTable, usersTable } from "@workspace/db/schema";
+import { externalApiClientsTable, schoolsTable, tenantsTable, ticketsTable, usersTable } from "@workspace/db/schema";
 import { eq, count, and, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../lib/auth.js";
 import { createAuditLog } from "../lib/audit.js";
@@ -114,6 +114,56 @@ function buildExternalIntegrationExample(clientId: string) {
   };
 }
 
+async function upsertExternalApiClientRecord(params: {
+  schoolId: number;
+  tenantId: number;
+  schoolName: string;
+  clientId: string;
+  apiKeyHash: string;
+  apiKeyLastFour: string;
+  active: boolean;
+  userId: number | null;
+}) {
+  const existingRows = await db
+    .select({ id: externalApiClientsTable.id })
+    .from(externalApiClientsTable)
+    .where(eq(externalApiClientsTable.schoolId, params.schoolId))
+    .limit(1);
+
+  if (existingRows[0]?.id) {
+    await db
+      .update(externalApiClientsTable)
+      .set({
+        tenantId: params.tenantId,
+        name: params.schoolName,
+        clientId: params.clientId,
+        apiKeyHash: params.apiKeyHash,
+        apiKeyLastFour: params.apiKeyLastFour,
+        active: params.active,
+        updatedByUserId: params.userId,
+        lastRotatedByUserId: params.userId,
+        lastRotatedAt: new Date(),
+        updatedAt: new Date(),
+      } as any)
+      .where(eq(externalApiClientsTable.id, existingRows[0].id));
+    return;
+  }
+
+  await db.insert(externalApiClientsTable).values({
+    tenantId: params.tenantId,
+    schoolId: params.schoolId,
+    name: params.schoolName,
+    clientId: params.clientId,
+    apiKeyHash: params.apiKeyHash,
+    apiKeyLastFour: params.apiKeyLastFour,
+    active: params.active,
+    createdByUserId: params.userId,
+    updatedByUserId: params.userId,
+    lastRotatedByUserId: params.userId,
+    lastRotatedAt: new Date(),
+  } as any);
+}
+
 async function getTenantSchools(tenantId: number) {
   const schools = await db
     .select({
@@ -142,6 +192,7 @@ async function getTenantSchools(tenantId: number) {
 async function syncTenantSchools(
   tenant: { id: number; slug: string },
   schools: Array<z.infer<typeof schoolInputSchema>>,
+  actorUserId: number | null,
 ) {
   const existingSchools = await db
     .select({
@@ -198,6 +249,38 @@ async function syncTenantSchools(
         })
         .where(eq(schoolsTable.id, school.id));
 
+      if (externalApiEnabled && nextClientId) {
+        if (nextApiKey) {
+          await upsertExternalApiClientRecord({
+            schoolId: school.id,
+            tenantId: tenant.id,
+            schoolName: school.name.trim(),
+            clientId: nextClientId,
+            apiKeyHash: await hashPassword(nextApiKey),
+            apiKeyLastFour: nextApiKey.slice(-4),
+            active: true,
+            userId: actorUserId,
+          });
+        } else {
+          await db
+            .update(externalApiClientsTable)
+            .set({
+              tenantId: tenant.id,
+              name: school.name.trim(),
+              clientId: nextClientId,
+              active: true,
+              updatedByUserId: actorUserId,
+              updatedAt: new Date(),
+            } as any)
+            .where(eq(externalApiClientsTable.schoolId, school.id));
+        }
+      } else {
+        await db
+          .update(externalApiClientsTable)
+          .set({ active: false, updatedByUserId: actorUserId, updatedAt: new Date() } as any)
+          .where(eq(externalApiClientsTable.schoolId, school.id));
+      }
+
       if (shouldGenerateApiKey && nextApiKey) {
         provisioning.push({
           schoolId: school.id,
@@ -236,6 +319,19 @@ async function syncTenantSchools(
       .limit(1);
 
     const insertedId = Number(insertedSchoolRows[0]?.id ?? 0);
+    if (externalApiEnabled && nextApiKey && insertedId > 0 && nextClientId) {
+      await upsertExternalApiClientRecord({
+        schoolId: insertedId,
+        tenantId: tenant.id,
+        schoolName: school.name.trim(),
+        clientId: nextClientId,
+        apiKeyHash: await hashPassword(nextApiKey),
+        apiKeyLastFour: nextApiKey.slice(-4),
+        active: true,
+        userId: actorUserId,
+      });
+    }
+
     if (externalApiEnabled && nextApiKey && insertedId > 0) {
       provisioning.push({
         schoolId: insertedId,
@@ -262,6 +358,10 @@ async function syncTenantSchools(
           updatedAt: new Date(),
         })
         .where(eq(schoolsTable.id, existingSchool.id));
+      await db
+        .update(externalApiClientsTable)
+        .set({ active: false, updatedByUserId: actorUserId, updatedAt: new Date() } as any)
+        .where(eq(externalApiClientsTable.schoolId, existingSchool.id));
     }
   }
 
@@ -361,7 +461,7 @@ router.post("/", requireAuth, requireRole("superadmin", "tecnico", "manager"), a
 
     const externalApiProvisioning =
       parsed.data.schools?.length
-        ? await syncTenantSchools({ id: createdTenant.id, slug: createdTenant.slug }, parsed.data.schools)
+        ? await syncTenantSchools({ id: createdTenant.id, slug: createdTenant.slug }, parsed.data.schools, authUser.userId)
         : [];
 
     const schools = await getTenantSchools(createdTenant.id);
@@ -463,7 +563,7 @@ router.patch("/:tenantId", requireAuth, requireRole("superadmin", "admin_cliente
     .where(eq(tenantsTable.id, tenantId));
 
   const externalApiProvisioning = parsed.data.schools
-    ? await syncTenantSchools({ id: tenantId, slug: old.slug }, parsed.data.schools)
+    ? await syncTenantSchools({ id: tenantId, slug: old.slug }, parsed.data.schools, authUser.userId)
     : [];
 
   const updated = await db.select().from(tenantsTable).where(eq(tenantsTable.id, tenantId)).limit(1);
@@ -546,6 +646,17 @@ router.post("/:tenantId/schools/:schoolId/external-api/regenerate", requireAuth,
       updatedAt: new Date(),
     })
     .where(eq(schoolsTable.id, schoolId));
+
+  await upsertExternalApiClientRecord({
+    schoolId,
+    tenantId,
+    schoolName: school.name,
+    clientId,
+    apiKeyHash: await hashPassword(apiKey),
+    apiKeyLastFour: apiKey.slice(-4),
+    active: true,
+    userId: authUser.userId,
+  });
 
   await createAuditLog({
     action: "regenerate_external_api_key",

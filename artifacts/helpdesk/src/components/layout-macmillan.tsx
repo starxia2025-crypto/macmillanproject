@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Bell,
+  CalendarClock,
   LayoutDashboard,
   Ticket,
   BookOpen,
@@ -15,7 +16,8 @@ import {
   LogOut,
   Menu,
   LifeBuoy,
-  ExternalLink,
+  Cable,
+  ClipboardPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customFetch } from "@workspace/api-client-react";
@@ -399,8 +401,10 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const navItems = [
     { href: "/dashboard", label: "Estadisticas", icon: LayoutDashboard, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "visor_cliente"] },
     { href: "/tickets", label: "Tickets de consulta", icon: Ticket, roles: ["superadmin", "admin_cliente", "tecnico", "usuario_cliente", "visor_cliente"] },
+    { href: "/assistance/request", label: "Solicitar asistencia", icon: ClipboardPlus, roles: ["admin_cliente", "manager", "usuario_cliente"] },
+    { href: "/assistance/inbox", label: "Bandeja de asistencias", icon: CalendarClock, roles: ["superadmin", "tecnico"] },
     { href: "/mochilas", label: "Consulta de Mochilas", icon: LifeBuoy, roles: ["superadmin", "tecnico"], externalDesktopApp: true },
-    { href: "/salesforce", label: "SalesForce", icon: ExternalLink, roles: ["superadmin", "tecnico"], externalSalesforce: true },
+    { href: "/integrations/apis", label: "APIs externas", icon: Cable, roles: ["superadmin", "tecnico"] },
     { href: "/portal", label: "Centro de ayuda", icon: BookOpen, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
     { href: "/clients", label: "Colegios", icon: Building2, roles: ["superadmin", "tecnico"] },
     { href: "/users", label: "Usuarios", icon: UsersIcon, roles: ["superadmin", "admin_cliente", "tecnico"] },
@@ -412,28 +416,10 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
     <div className="flex w-full flex-col gap-1">
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isExternalAction = item.externalDesktopApp || item.externalSalesforce;
+        const isExternalAction = item.externalDesktopApp;
         const isActive = !isExternalAction && location.startsWith(item.href);
         const handleNavClick = async () => {
           if (!isExternalAction) return;
-
-          if (item.externalSalesforce) {
-            if (!window.desktopBridge?.openSalesforce) {
-              window.open("https://macmillaneducation.my.salesforce.com/", "_blank", "noopener,noreferrer");
-              return;
-            }
-
-            try {
-              await window.desktopBridge.openSalesforce();
-            } catch (error) {
-              toast({
-                title: "No se pudo abrir SalesForce",
-                description: error instanceof Error ? error.message : "Intentalo de nuevo.",
-                variant: "destructive",
-              });
-            }
-            return;
-          }
 
           if (!window.desktopBridge?.openMochilasApp) {
             toast({

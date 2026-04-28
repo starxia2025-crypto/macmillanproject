@@ -7,3 +7,7 @@ export * from "./audit_logs";
 export * from "./sessions";
 export * from "./schools";
 export * from "./system_alerts";
+export * from "./assistance_requests";
+export * from "./assistance_request_notes";
+export * from "./external_api_clients";
+export * from "./external_api_logs";

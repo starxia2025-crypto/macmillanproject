@@ -57,3 +57,23 @@ export function RoleBadge({ role }: { role: string }) {
     </Badge>
   );
 }
+
+export function AssistanceStatusBadge({ status }: { status: string }) {
+  const variants: Record<string, { bg: string; text: string; label: string }> = {
+    pendiente: { bg: "bg-amber-100", text: "text-amber-800", label: "Pendiente" },
+    aceptada: { bg: "bg-sky-100", text: "text-sky-800", label: "Aceptada" },
+    programada: { bg: "bg-indigo-100", text: "text-indigo-700", label: "Programada" },
+    en_curso: { bg: "bg-violet-100", text: "text-violet-700", label: "En curso" },
+    completada: { bg: "bg-emerald-100", text: "text-emerald-700", label: "Completada" },
+    cancelada: { bg: "bg-slate-100", text: "text-slate-700", label: "Cancelada" },
+    rechazada: { bg: "bg-rose-100", text: "text-rose-700", label: "Rechazada" },
+  };
+
+  const v = variants[status] || { bg: "bg-slate-100", text: "text-slate-700", label: status };
+
+  return (
+    <Badge variant="outline" className={`${v.bg} ${v.text} border-transparent font-medium shadow-none`}>
+      {v.label}
+    </Badge>
+  );
+}
