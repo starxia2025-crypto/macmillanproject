@@ -3,13 +3,17 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useLogin } from "@workspace/api-client-react";
+import { useMutation } from "@tanstack/react-query";
+import { customFetch, useLogin } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BookOpenText, Eye, GraduationCap, Headphones, Loader2, Lock, Mail, PlugZap, UserRoundCheck } from "lucide-react";
+import { BookOpenText, Eye, EyeOff, GraduationCap, Headphones, Loader2, Lock, Mail, PlugZap, UserRoundCheck } from "lucide-react";
 import { getDefaultRouteForRole } from "@/lib/default-route";
+import { toast } from "@/hooks/use-toast";
 import meeLogo from "@/assets/mee-logo.svg";
 
 const loginSchema = z.object({
@@ -19,10 +23,20 @@ const loginSchema = z.object({
   rememberMe: z.boolean(),
 });
 
+const supportContactSchema = z.object({
+  name: z.string().trim().min(2, "Introduce tu nombre"),
+  email: z.string().trim().email("Introduce un correo valido"),
+  phone: z.string().trim().max(40).optional(),
+  schoolName: z.string().trim().max(160).optional(),
+  subject: z.string().trim().min(3, "Indica un asunto breve"),
+  message: z.string().trim().min(10, "Cuentanos brevemente que necesitas"),
+});
+
 const RECENT_LOGIN_EMAILS_STORAGE_KEY = "helpdesk-recent-login-emails";
 const MAX_RECENT_LOGIN_EMAILS = 5;
 
 type LoginFormValues = z.infer<typeof loginSchema>;
+type SupportContactFormValues = z.infer<typeof supportContactSchema>;
 type CaptchaChallenge = {
   question: string;
   token: string;
@@ -121,10 +135,25 @@ function BackgroundRays() {
 export default function MacmillanLogin() {
   const [, setLocation] = useLocation();
   const [captchaChallenge, setCaptchaChallenge] = useState<CaptchaChallenge | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
+  const [supportSent, setSupportSent] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "", captchaAnswer: "", rememberMe: true },
+  });
+
+  const supportForm = useForm<SupportContactFormValues>({
+    resolver: zodResolver(supportContactSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      schoolName: "",
+      subject: "",
+      message: "",
+    },
   });
 
   const loginMutation = useLogin({
@@ -151,12 +180,42 @@ export default function MacmillanLogin() {
     },
   });
 
+  const supportMutation = useMutation({
+    mutationFn: async (values: SupportContactFormValues) =>
+      customFetch<{ message: string }>("/api/auth/support-contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      }),
+    onSuccess: (response) => {
+      setSupportSent(true);
+      toast({
+        title: "Mensaje enviado",
+        description: response.message,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "No se pudo enviar el mensaje",
+        description: error instanceof Error ? error.message : "Intentalo de nuevo en unos minutos.",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
     const emails = readRecentLoginEmails();
     if (emails[0] && !form.getValues("email")) {
       form.setValue("email", emails[0], { shouldValidate: false });
     }
   }, [form]);
+
+  useEffect(() => {
+    const loginEmail = form.getValues("email");
+    if (loginEmail && !supportForm.getValues("email")) {
+      supportForm.setValue("email", loginEmail, { shouldValidate: false });
+    }
+  }, [form, supportForm]);
 
   function onSubmit(data: LoginFormValues) {
     if (captchaChallenge && !data.captchaAnswer?.trim()) {
@@ -190,6 +249,19 @@ export default function MacmillanLogin() {
     }
 
     return "No se pudo iniciar sesion. Revisa tus datos e intentalo de nuevo.";
+  }
+
+  function openSupportDialog() {
+    setSupportSent(false);
+    supportForm.reset({
+      name: "",
+      email: form.getValues("email") || "",
+      phone: "",
+      schoolName: "",
+      subject: "",
+      message: "",
+    });
+    setSupportDialogOpen(true);
   }
 
   return (
@@ -280,12 +352,19 @@ export default function MacmillanLogin() {
                           <div className="relative">
                             <Lock className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                             <Input
-                              type="password"
+                              type={showPassword ? "text" : "password"}
                               placeholder="••••••••••"
                               {...field}
                               className="h-12 rounded-xl border-slate-200 pl-12 pr-12 text-[16px] text-slate-700 placeholder:text-slate-400"
                             />
-                            <Eye className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                            <button
+                              type="button"
+                              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                              onClick={() => setShowPassword((current) => !current)}
+                              aria-label={showPassword ? "Ocultar contrasena" : "Mostrar contrasena"}
+                            >
+                              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                            </button>
                           </div>
                         </FormControl>
                         <FormMessage />
@@ -361,7 +440,14 @@ export default function MacmillanLogin() {
                   </div>
 
                   <p className="pt-2 text-center text-[14px] leading-6 text-slate-700">
-                    Necesitas ayuda? Contacta con el <span className="font-medium text-[#2563eb]">equipo de soporte</span>
+                    Necesitas ayuda? Contacta con el{" "}
+                    <button
+                      type="button"
+                      className="font-medium text-[#2563eb] hover:underline"
+                      onClick={openSupportDialog}
+                    >
+                      equipo de soporte
+                    </button>
                   </p>
                 </form>
               </Form>
@@ -379,6 +465,151 @@ export default function MacmillanLogin() {
             <span>&copy; 2024 Macmillan Education. Todos los derechos reservados.</span>
           </div>
         </footer>
+
+        <Dialog
+          open={supportDialogOpen}
+          onOpenChange={(open) => {
+            setSupportDialogOpen(open);
+            if (!open) {
+              setSupportSent(false);
+            }
+          }}
+        >
+          <DialogContent className="max-w-xl rounded-2xl">
+            <DialogHeader>
+              <DialogTitle>Contactar con soporte</DialogTitle>
+              <DialogDescription>
+                Rellena este formulario y enviaremos tu mensaje al equipo de soporte de Macmillan.
+              </DialogDescription>
+            </DialogHeader>
+
+            {supportSent ? (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-5 text-sm text-emerald-800">
+                  Tu mensaje se ha enviado correctamente a soporte. Te responderan lo antes posible.
+                </div>
+                <DialogFooter>
+                  <Button type="button" onClick={() => setSupportDialogOpen(false)}>
+                    Cerrar
+                  </Button>
+                </DialogFooter>
+              </div>
+            ) : (
+              <Form {...supportForm}>
+                <form
+                  onSubmit={supportForm.handleSubmit((values) => supportMutation.mutate(values))}
+                  className="space-y-4"
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={supportForm.control}
+                      name="name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Nombre</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Tu nombre" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={supportForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Correo electronico</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="tu@colegio.es" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField
+                      control={supportForm.control}
+                      name="phone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefono</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Opcional" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={supportForm.control}
+                      name="schoolName"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Colegio o centro</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Opcional" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={supportForm.control}
+                    name="subject"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Asunto</FormLabel>
+                        <FormControl>
+                          <Input {...field} placeholder="Necesito ayuda para acceder a la plataforma" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={supportForm.control}
+                    name="message"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mensaje</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            placeholder="Describe brevemente lo que necesitas y, si puedes, indica el problema o la consulta."
+                            className="min-h-[140px]"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setSupportDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={supportMutation.isPending}>
+                      {supportMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        "Enviar mensaje"
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </Form>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

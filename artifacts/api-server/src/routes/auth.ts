@@ -16,6 +16,7 @@ import {
 import { createAuditLog } from "../lib/audit.js";
 import { parseDbJson } from "../lib/db-json.js";
 import { logger } from "../lib/logger.js";
+import { sendSupportContactEmail } from "../lib/support-contact-email.js";
 
 const router = Router();
 const MAX_FAILED_LOGIN_ATTEMPTS = 5;
@@ -44,6 +45,15 @@ const forgotPasswordSchema = z.object({
 const resetPasswordSchema = z.object({
   token: z.string().min(20),
   password: z.string().min(MIN_PASSWORD_LENGTH),
+});
+
+const supportContactSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email(),
+  phone: z.string().trim().max(40).optional().or(z.literal("")),
+  schoolName: z.string().trim().max(160).optional().or(z.literal("")),
+  subject: z.string().trim().max(160).optional().or(z.literal("")),
+  message: z.string().trim().min(10).max(2000),
 });
 
 function getClientIp(req: Request) {
@@ -443,6 +453,50 @@ router.post("/forgot-password", async (req, res) => {
   }
 
   res.json({ message: "Si el correo existe, se enviaran instrucciones para restablecer la contrasena." });
+});
+
+router.post("/support-contact", async (req, res) => {
+  const parsed = supportContactSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "ValidationError", message: "Revisa los datos del formulario de contacto." });
+    return;
+  }
+
+  const recipient = process.env["SUPPORT_CONTACT_EMAIL"] || "javier.alexander@macmillaneducation.com";
+
+  try {
+    const result = await sendSupportContactEmail({
+      recipient,
+      requesterName: parsed.data.name,
+      requesterEmail: parsed.data.email.toLowerCase(),
+      requesterPhone: parsed.data.phone || null,
+      schoolName: parsed.data.schoolName || null,
+      subject: parsed.data.subject || "Solicitud de ayuda desde login",
+      message: parsed.data.message,
+    });
+
+    if (!result.sent) {
+      logger.error(
+        { recipient, requesterEmail: parsed.data.email.toLowerCase(), reason: result.reason, ip: getClientIp(req) },
+        "Support contact email skipped",
+      );
+      res.status(503).json({ error: "MailNotConfigured", message: "El servicio de soporte no esta disponible ahora mismo." });
+      return;
+    }
+
+    logger.info(
+      { recipient, requesterEmail: parsed.data.email.toLowerCase(), via: result.via, ip: getClientIp(req) },
+      "Support contact email sent",
+    );
+
+    res.json({ message: "Tu mensaje se ha enviado correctamente al equipo de soporte." });
+  } catch (error) {
+    logger.error(
+      { err: error, recipient, requesterEmail: parsed.data.email.toLowerCase(), ip: getClientIp(req) },
+      "Support contact email failed",
+    );
+    res.status(500).json({ error: "InternalServerError", message: "No se pudo enviar tu mensaje en este momento." });
+  }
 });
 
 router.post("/reset-password", async (req, res) => {
