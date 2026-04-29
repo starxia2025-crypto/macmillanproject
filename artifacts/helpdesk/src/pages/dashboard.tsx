@@ -94,6 +94,15 @@ function ChartEmpty({ message }: { message: string }) {
   return <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-500">{message}</div>;
 }
 
+function normalizeCount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeText(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
 export default function Dashboard() {
   const { data: user } = useGetMe();
   const canUseGlobalFilters = user?.role === "superadmin" || user?.role === "tecnico";
@@ -214,11 +223,64 @@ export default function Dashboard() {
     [openTicketsData?.data],
   );
   const technicians = techniciansData?.data ?? [];
-  const schoolData = schoolDataQuery.data ?? [];
-  const inquiryTypeData = inquiryTypeQuery.data ?? [];
-  const stageData = stageQuery.data ?? [];
-  const schoolReporterData = schoolReporterQuery.data ?? [];
-  const resolutionBySchoolData = resolutionBySchoolQuery.data ?? [];
+  const schoolData = useMemo(
+    () => (schoolDataQuery.data ?? []).map((item) => ({
+      schoolName: normalizeText(item.schoolName, "Sin colegio"),
+      count: normalizeCount(item.count),
+    })),
+    [schoolDataQuery.data],
+  );
+  const inquiryTypeData = useMemo(
+    () => (inquiryTypeQuery.data ?? []).map((item) => ({
+      inquiryType: normalizeText(item.inquiryType, "Sin tipo"),
+      count: normalizeCount(item.count),
+    })),
+    [inquiryTypeQuery.data],
+  );
+  const stageData = useMemo(
+    () => (stageQuery.data ?? []).map((item) => ({
+      stage: normalizeText(item.stage, "Sin etapa"),
+      count: normalizeCount(item.count),
+    })),
+    [stageQuery.data],
+  );
+  const schoolReporterData = useMemo(
+    () => (schoolReporterQuery.data ?? []).map((item) => ({
+      schoolName: normalizeText(item.schoolName, "Sin colegio"),
+      reporterName: normalizeText(item.reporterName, "Sin informador"),
+      label: normalizeText(item.label, "Sin relacion"),
+      count: normalizeCount(item.count),
+    })),
+    [schoolReporterQuery.data],
+  );
+  const resolutionBySchoolData = useMemo(
+    () => (resolutionBySchoolQuery.data ?? []).map((item) => ({
+      schoolName: normalizeText(item.schoolName, "Sin colegio"),
+      avgHours: normalizeCount(item.avgHours),
+      count: normalizeCount(item.count),
+    })),
+    [resolutionBySchoolQuery.data],
+  );
+  const safeTimeData = useMemo(
+    () => (timeData ?? []).map((item) => ({
+      date: normalizeText((item as any).date, ""),
+      created: normalizeCount((item as any).created),
+      resolved: normalizeCount((item as any).resolved),
+    })).filter((item) => item.date),
+    [timeData],
+  );
+  const safeActivity = useMemo(
+    () => (activity ?? []).map((item) => ({
+      ...item,
+      userName: normalizeText(item.userName, "Usuario"),
+      action: normalizeText(item.action, "accion"),
+      entityType: normalizeText(item.entityType, "elemento"),
+      entityTitle: typeof item.entityTitle === "string" ? item.entityTitle : null,
+      tenantName: typeof item.tenantName === "string" ? item.tenantName : null,
+      createdAt: item.createdAt,
+    })),
+    [activity],
+  );
 
   const resolvedVsPending = useMemo(() => {
     const resolved = Number(stats?.resolvedTickets ?? 0) + Number(stats?.closedTickets ?? 0);
@@ -435,11 +497,11 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent className="pt-0">
             <div className="h-[340px] w-full">
-              {timeData.length === 0 ? (
+              {safeTimeData.length === 0 ? (
                 <ChartEmpty message="Todavia no hay datos temporales suficientes." />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={timeData} margin={{ top: 12, right: 16, left: -12, bottom: 0 }}>
+                  <AreaChart data={safeTimeData} margin={{ top: 12, right: 16, left: -12, bottom: 0 }}>
                     <defs>
                       <linearGradient id="createdGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.32} />
@@ -648,10 +710,10 @@ export default function Dashboard() {
             <CardDescription>Las ultimas acciones registradas en el sistema.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pt-0">
-            {activity.length === 0 ? (
+            {safeActivity.length === 0 ? (
               <div className="rounded-2xl border border-dashed px-4 py-10 text-center text-sm text-slate-500">Sin actividad reciente.</div>
             ) : (
-              activity.map((item) => (
+              safeActivity.map((item) => (
                 <div key={item.id} className="flex gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
                   <div className="mt-1 h-2.5 w-2.5 rounded-full bg-indigo-500" />
                   <div className="min-w-0 flex-1">
