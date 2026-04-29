@@ -1,4 +1,4 @@
-import { int, timestamp, varchar, longtext } from "drizzle-orm/mysql-core";
+import { foreignKey, int, timestamp, varchar, longtext } from "drizzle-orm/mysql-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { schoolsTable } from "./schools";
@@ -32,9 +32,9 @@ export type AssistanceReason = typeof assistanceReasonEnum[number];
 export const assistanceRequestsTable = helpdeskTable("SOP_assistance_requests", {
   id: idColumn(),
   requestNumber: varchar("request_number", { length: 50 }).notNull().unique(),
-  tenantId: int("tenant_id").notNull().references(() => tenantsTable.id),
-  schoolId: int("school_id").references(() => schoolsTable.id),
-  requesterUserId: int("requester_user_id").references(() => usersTable.id),
+  tenantId: int("tenant_id").notNull(),
+  schoolId: int("school_id"),
+  requesterUserId: int("requester_user_id"),
   requesterName: varchar("requester_name", { length: 255 }).notNull(),
   requesterPhone: varchar("requester_phone", { length: 60 }),
   requesterEmail: varchar("requester_email", { length: 255 }).notNull(),
@@ -46,7 +46,7 @@ export const assistanceRequestsTable = helpdeskTable("SOP_assistance_requests", 
   requestedAt: timestamp("requested_at", { mode: "date", fsp: 3 }),
   scheduledAt: timestamp("scheduled_at", { mode: "date", fsp: 3 }),
   scheduledEndAt: timestamp("scheduled_end_at", { mode: "date", fsp: 3 }),
-  assignedToId: int("assigned_to_id").references(() => usersTable.id),
+  assignedToId: int("assigned_to_id"),
   description: longtext("description").notNull(),
   internalObservations: longtext("internal_observations"),
   meetingProvider: varchar("meeting_provider", { length: 60 }),
@@ -55,7 +55,28 @@ export const assistanceRequestsTable = helpdeskTable("SOP_assistance_requests", 
   meetingNotes: longtext("meeting_notes"),
   createdAt: createdAtColumn(),
   updatedAt: updatedAtColumn(),
-});
+}, (table) => [
+  foreignKey({
+    columns: [table.tenantId],
+    foreignColumns: [tenantsTable.id],
+    name: "fk_ar_tenant",
+  }),
+  foreignKey({
+    columns: [table.schoolId],
+    foreignColumns: [schoolsTable.id],
+    name: "fk_ar_school",
+  }),
+  foreignKey({
+    columns: [table.requesterUserId],
+    foreignColumns: [usersTable.id],
+    name: "fk_ar_requester",
+  }),
+  foreignKey({
+    columns: [table.assignedToId],
+    foreignColumns: [usersTable.id],
+    name: "fk_ar_assigned",
+  }),
+]);
 
 export const insertAssistanceRequestSchema = createInsertSchema(assistanceRequestsTable).omit({
   id: true,
