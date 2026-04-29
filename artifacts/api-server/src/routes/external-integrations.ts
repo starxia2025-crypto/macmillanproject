@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { and, asc, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -395,7 +395,7 @@ const externalIntegrationRateLimit = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator(req) {
-    return `${req.ip}:${req.header("x-client-id")?.trim() || "unknown"}`;
+    return `${ipKeyGenerator(req.ip)}:${req.header("x-client-id")?.trim() || "unknown"}`;
   },
   handler(req, res) {
     logger.warn({
