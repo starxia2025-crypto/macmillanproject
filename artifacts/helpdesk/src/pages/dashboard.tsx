@@ -82,6 +82,14 @@ function truncateLabel(value: string, max = 22) {
   return value.length > max ? `${value.slice(0, max - 1)}...` : value;
 }
 
+function formatSafeDate(value: unknown, pattern: string) {
+  const date = value instanceof Date ? value : new Date(String(value ?? ""));
+  if (Number.isNaN(date.getTime())) {
+    return String(value ?? "");
+  }
+  return format(date, pattern, { locale: es });
+}
+
 function ChartEmpty({ message }: { message: string }) {
   return <div className="flex h-full items-center justify-center rounded-2xl border border-dashed border-slate-200 text-sm text-slate-500">{message}</div>;
 }
@@ -443,9 +451,9 @@ export default function Dashboard() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={(value) => format(new Date(value), "d MMM", { locale: es })} />
+                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={(value) => formatSafeDate(value, "d MMM")} />
                     <YAxis tick={{ fontSize: 12, fill: "#64748b" }} axisLine={false} tickLine={false} />
-                    <RechartsTooltip contentStyle={{ borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 12px 32px rgba(15,23,42,0.08)" }} labelFormatter={(value) => format(new Date(value), "d 'de' MMMM", { locale: es })} />
+                    <RechartsTooltip contentStyle={{ borderRadius: "16px", border: "1px solid #e2e8f0", boxShadow: "0 12px 32px rgba(15,23,42,0.08)" }} labelFormatter={(value) => formatSafeDate(value, "d 'de' MMMM")} />
                     <Legend />
                     <Area type="monotone" dataKey="created" name="Creadas" stroke="#4f46e5" fill="url(#createdGradient)" strokeWidth={3} />
                     <Area type="monotone" dataKey="resolved" name="Resueltas" stroke="#14b8a6" fill="url(#resolvedGradient)" strokeWidth={3} />
@@ -652,7 +660,7 @@ export default function Dashboard() {
                     </p>
                     {item.entityTitle && <p className="mt-1 line-clamp-1 text-sm text-slate-500">{item.entityTitle}</p>}
                     <p className="mt-2 text-xs text-slate-400">
-                      {format(new Date(item.createdAt), "d MMM, HH:mm", { locale: es })}
+                      {formatSafeDate(item.createdAt, "d MMM, HH:mm")}
                       {item.tenantName ? ` - ${item.tenantName}` : ""}
                     </p>
                   </div>
