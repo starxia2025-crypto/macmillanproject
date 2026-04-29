@@ -9,6 +9,8 @@ import { parseDbJson, stringifyDbJson } from "../lib/db-json.js";
 import { containsInsensitive } from "../lib/db-search.js";
 import { findMochilasStudentByEmail, findMochilasStudentByOrderId } from "../lib/mochilas.js";
 import { sendTicketResolvedEmail } from "../lib/ticket-resolution-email-graph.js";
+import { sendValidatedUserResetEmail } from "../lib/validated-user-reset-email.js";
+import crypto from "node:crypto";
 
 const router = Router();
 
@@ -373,6 +375,38 @@ function normalizeTicket<T extends { customFields?: unknown }>(ticket: T) {
     ...ticket,
     customFields: parseCustomFields(ticket.customFields),
   };
+}
+
+function isLoginAccessTicket(ticket: { category?: string | null; customFields?: unknown }) {
+  const customFields = parseCustomFields(ticket.customFields);
+  const source = typeof customFields?.["source"] === "string" ? customFields["source"] : null;
+  return (
+    ticket.category === "recuperacion_contrasena_login" ||
+    ticket.category === "contacto_soporte_login" ||
+    source === "forgot_password" ||
+    source === "login_support_contact" ||
+    source === "contact_support"
+  );
+}
+
+function getValidatedUserRequesterEmail(ticket: { customFields?: unknown }) {
+  const customFields = parseCustomFields(ticket.customFields);
+  const requesterEmail = typeof customFields?.["requesterEmail"] === "string" ? customFields["requesterEmail"].trim().toLowerCase() : "";
+  return requesterEmail;
+}
+
+function getValidatedUserRequesterName(ticket: { customFields?: unknown }) {
+  const customFields = parseCustomFields(ticket.customFields);
+  return typeof customFields?.["requesterName"] === "string" ? customFields["requesterName"].trim() : null;
+}
+
+function hashResetToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function buildResetPasswordUrl(token: string) {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  return `${frontendUrl.replace(/\/?$/, "/")}reset-password?token=${encodeURIComponent(token)}`;
 }
 
 function getTicketVisibilityConditions(authUser: any) {
@@ -1216,6 +1250,112 @@ router.post("/:ticketId/status", requireAuth, async (req, res) => {
     assignedToName: (assignee as any)[0]?.name ?? null,
     commentCount: Number(commentCount[0]?.count ?? 0),
   });
+});
+
+router.post("/:ticketId/reset-validated-user-password", requireAuth, requireRole("superadmin", "tecnico"), async (req, res) => {
+  try {
+    const ticketId = Number(req.params["ticketId"]);
+    const authUser = (req as any).user;
+
+    const tickets = await db.select().from(ticketsTable).where(eq(ticketsTable.id, ticketId)).limit(1);
+    const ticket = tickets[0];
+    if (!ticket) {
+      res.status(404).json({ error: "NotFound", message: "No se encontro la consulta solicitada." });
+      return;
+    }
+
+    if (!canUserAccessTicket(ticket, authUser)) {
+      res.status(403).json({ error: "Forbidden", message: "No tienes permisos para realizar esta accion." });
+      return;
+    }
+
+    if (!isLoginAccessTicket(ticket)) {
+      res.status(400).json({ error: "ValidationError", message: "Este ticket no corresponde a una solicitud de acceso validada." });
+      return;
+    }
+
+    const requesterEmail = getValidatedUserRequesterEmail(ticket);
+    if (!requesterEmail) {
+      res.status(400).json({ error: "ValidationError", message: "No se encontro un correo de usuario validado asociado al ticket." });
+      return;
+    }
+
+    const users = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, requesterEmail))
+      .limit(1);
+    const validatedUser = users[0];
+
+    if (!validatedUser || !validatedUser.active) {
+      res.status(404).json({ error: "NotFound", message: "No se encontro un usuario validado activo asociado a este ticket." });
+      return;
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = hashResetToken(rawToken);
+    const resetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const resetUrl = buildResetPasswordUrl(rawToken);
+
+    await db
+      .update(usersTable)
+      .set({
+        resetPasswordTokenHash: tokenHash,
+        resetPasswordExpiresAt: resetExpiresAt,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(usersTable.id, validatedUser.id));
+
+    const emailResult = await sendValidatedUserResetEmail({
+      recipient: validatedUser.email,
+      recipientName: validatedUser.name,
+      resetUrl,
+      ticketNumber: ticket.ticketNumber,
+      requestedByName: getValidatedUserRequesterName(ticket),
+      supportOperatorName: authUser.name ?? null,
+    });
+
+    if (!emailResult.sent) {
+      res.status(503).json({
+        error: "EmailNotConfigured",
+        message: "No se pudo completar el reseteo porque el envio de correo no esta configurado.",
+      });
+      return;
+    }
+
+    await db.insert(commentsTable).values({
+      ticketId,
+      authorId: authUser.userId,
+      content: `Se genero un enlace seguro de restablecimiento de acceso para el usuario validado ${validatedUser.email}.`,
+      isInternal: true,
+    });
+
+    await createAuditLog({
+      action: "validated_user_password_reset",
+      entityType: "ticket",
+      entityId: ticketId,
+      userId: authUser.userId,
+      tenantId: ticket.tenantId,
+      newValues: {
+        requesterEmail,
+        validatedUserId: validatedUser.id,
+        provider: emailResult.provider,
+        expiresAt: resetExpiresAt.toISOString(),
+      },
+    });
+
+    res.json({
+      message: "Se ha enviado al usuario un enlace seguro para restablecer su acceso.",
+    });
+  } catch (error) {
+    console.error("Validated user password reset failed", error);
+    res.status(500).json({
+      error: "InternalServerError",
+      message: "No se pudo completar el reseteo de acceso en este momento.",
+    });
+  }
 });
 
 router.get("/:ticketId/comments", requireAuth, async (req, res) => {

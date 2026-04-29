@@ -162,6 +162,17 @@ function formatAuditAction(action: unknown) {
   return actions[String(action ?? "")] ?? safeDisplayText(action);
 }
 
+function isLoginAccessTicket(ticket: any) {
+  const source = safeDisplayText(ticket?.customFields?.source).trim();
+  return (
+    ticket?.category === "recuperacion_contrasena_login" ||
+    ticket?.category === "contacto_soporte_login" ||
+    source === "forgot_password" ||
+    source === "login_support_contact" ||
+    source === "contact_support"
+  );
+}
+
 export default function TicketDetail() {
   const [location, setLocation] = useLocation();
   const id = useMemo(() => {
@@ -185,6 +196,8 @@ export default function TicketDetail() {
   const [editPriority, setEditPriority] = useState<TicketPriority>(TicketPriority.media);
   const [editStudentEmail, setEditStudentEmail] = useState("");
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const [validatedUserResetOpen, setValidatedUserResetOpen] = useState(false);
+  const [isResettingValidatedUser, setIsResettingValidatedUser] = useState(false);
   const [orderLookup, setOrderLookup] = useState<any | null>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(false);
 
@@ -234,11 +247,18 @@ export default function TicketDetail() {
 
   const isStaff = ["superadmin", "tecnico", "admin_cliente"].includes(user?.role ?? "");
   const canUseMeeAdmin = ["superadmin", "tecnico"].includes(user?.role ?? "");
+  const canResetValidatedUserPassword = ["superadmin", "tecnico"].includes(user?.role ?? "");
   const canManageTicket = !!user && !!ticket && (isStaff || ticket.createdById === user.id);
   const showInlineManageButtons = canManageTicket && user?.role !== "tecnico";
+  const isAccessRequestTicket = isLoginAccessTicket(ticket);
   const meeAdminEmail = getTicketStudentEmail(ticket);
   const meeAdminToken = getTicketPasswordToken(ticket);
   const ticketOrderId = getTicketOrderId(ticket).trim();
+  const requesterEmail = safeDisplayText(ticket?.customFields?.requesterEmail).trim().toLowerCase();
+  const requesterName = safeDisplayText(ticket?.customFields?.requesterName).trim();
+  const requesterPhone = safeDisplayText(ticket?.customFields?.requesterPhone).trim();
+  const requesterSchoolName = safeDisplayText(ticket?.customFields?.requesterSchoolName).trim();
+  const accessSource = safeDisplayText(ticket?.customFields?.source).trim();
   const mochilaRecords = useMemo(() => getMochilaRecords(ticket), [ticket]);
   const incidentData = useMemo(() => {
     if (!ticket?.customFields) return [];
@@ -277,6 +297,12 @@ export default function TicketDetail() {
     const hidden = new Set([
       "studentEmail",
       "reporterEmail",
+      "requesterEmail",
+      "requesterName",
+      "requesterPhone",
+      "requesterSchoolName",
+      "source",
+      "submittedAt",
       "inquiryType",
       "subjectType",
       "studentEnrollment",
@@ -541,6 +567,29 @@ export default function TicketDetail() {
     }
   };
 
+  const handleResetValidatedUserPassword = async () => {
+    setIsResettingValidatedUser(true);
+    try {
+      const response = await customFetch<{ message: string }>(`/api/tickets/${id}/reset-validated-user-password`, {
+        method: "POST",
+      });
+      toast({
+        title: "Acceso restablecido",
+        description: safeDisplayText(response?.message || "Se ha enviado un enlace seguro al usuario validado."),
+      });
+      setValidatedUserResetOpen(false);
+      await Promise.all([refetchTicket(), refetchComments()]);
+    } catch (error) {
+      toast({
+        title: "No se pudo restablecer el acceso",
+        description: error instanceof Error ? safeDisplayText(error.message) : "Intentalo de nuevo.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResettingValidatedUser(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <Button variant="ghost" onClick={() => setLocation("/tickets")} className="gap-2 -ml-4 text-slate-500">
@@ -616,10 +665,62 @@ export default function TicketDetail() {
         <div className="md:col-span-2 space-y-6">
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
-              <h2 className="text-lg font-semibold text-slate-900">Datos de la incidencia</h2>
+              <h2 className="text-lg font-semibold text-slate-900">{isAccessRequestTicket ? "Solicitud de acceso" : "Datos de la incidencia"}</h2>
             </CardHeader>
             <CardContent className="space-y-4">
-              {incidentData.length > 0 ? (
+              {isAccessRequestTicket ? (
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Origen</div>
+                      <div className="mt-1 text-sm font-medium text-slate-900 whitespace-pre-wrap">
+                        {accessSource === "forgot_password" ? "Olvide mi contrasena" : "Contacto desde pantalla de acceso"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Email del usuario validado</div>
+                      <div className="mt-1 text-sm font-medium text-slate-900 whitespace-pre-wrap">
+                        {requesterEmail || "-"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Nombre</div>
+                      <div className="mt-1 text-sm font-medium text-slate-900 whitespace-pre-wrap">
+                        {requesterName || "-"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Telefono</div>
+                      <div className="mt-1 text-sm font-medium text-slate-900 whitespace-pre-wrap">
+                        {requesterPhone || "-"}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 sm:col-span-2">
+                      <div className="text-xs uppercase tracking-wide text-slate-500">Colegio o centro</div>
+                      <div className="mt-1 text-sm font-medium text-slate-900 whitespace-pre-wrap">
+                        {requesterSchoolName || safeDisplayText(ticket.schoolName || ticket.tenantName) || "-"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {canResetValidatedUserPassword && (
+                    <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-slate-900">Accion de soporte</p>
+                          <p className="text-sm text-slate-600">
+                            Enviaremos al usuario un enlace seguro y temporal para definir una nueva contrasena de acceso.
+                          </p>
+                        </div>
+                        <Button type="button" className="gap-2" onClick={() => setValidatedUserResetOpen(true)}>
+                          <KeyRound className="h-4 w-4" />
+                          Resetear contrasena de usuario validado
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : incidentData.length > 0 ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {incidentData.map((item) => (
                     <div key={item.key} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -635,7 +736,7 @@ export default function TicketDetail() {
                   Esta consulta no tiene datos adicionales de incidencia guardados.
                 </div>
               )}
-              {canUseMeeAdmin && (
+              {!isAccessRequestTicket && canUseMeeAdmin && (
                 <div className="flex flex-wrap gap-3">
                   <Button type="button" variant="outline" className="gap-2" onClick={() => void handleOpenMeeAdmin()}>
                     <ExternalLink className="h-4 w-4" />
@@ -655,7 +756,7 @@ export default function TicketDetail() {
                   </Button>
                 </div>
               )}
-              {actionItems.length > 0 && (
+              {!isAccessRequestTicket && actionItems.length > 0 && (
                 <div className="space-y-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Líneas marcadas en la consulta</p>
@@ -706,7 +807,7 @@ export default function TicketDetail() {
                   </div>
                 </div>
               )}
-              {mochilaRecords.length > 0 && (
+              {!isAccessRequestTicket && mochilaRecords.length > 0 && (
                 <div className="space-y-3 rounded-xl border border-violet-200 bg-violet-50/70 p-4">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">Libros activos en Mochilas</p>
@@ -1120,6 +1221,30 @@ export default function TicketDetail() {
               No se encontraron datos del pedido en Mochilas.
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={validatedUserResetOpen} onOpenChange={setValidatedUserResetOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resetear acceso del usuario validado</DialogTitle>
+            <DialogDescription>
+              Se generara un enlace seguro y temporal para que el usuario defina una nueva contrasena de acceso. Esta accion quedara registrada internamente en el ticket.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p><strong>Usuario:</strong> {requesterName || "-"}</p>
+            <p><strong>Email:</strong> {requesterEmail || "-"}</p>
+            <p><strong>Ticket:</strong> {ticket.ticketNumber}</p>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setValidatedUserResetOpen(false)} disabled={isResettingValidatedUser}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={() => void handleResetValidatedUserPassword()} disabled={isResettingValidatedUser}>
+              {isResettingValidatedUser ? "Enviando..." : "Confirmar reseteo"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
