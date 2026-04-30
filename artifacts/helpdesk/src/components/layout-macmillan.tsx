@@ -328,7 +328,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const activeSchoolName = (user as any).schoolName || user.tenantName || "Macmillan Iberia";
   const activeSchoolLogo = typeof tenantConfig.tenantLogoUrl === "string" ? tenantConfig.tenantLogoUrl.trim() : "";
   const brandTextColor = "#0f2f72";
-  const sidebarBackgroundColor = "#172b6a";
+  const sidebarBackgroundColor = "linear-gradient(180deg, #182b6b 0%, #10245d 55%, #0a1c4a 100%)";
   const sidebarTextColor = "#f8fbff";
   const tenantName = typeof tenantConfig.tenantName === "string" ? tenantConfig.tenantName.trim() : "";
   const isMacmillanSupportUser = user.role === "tecnico" && tenantName.toLowerCase().includes("macmillan");
@@ -345,9 +345,9 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const tenantQuickLinks = Array.isArray(tenantConfig.tenantQuickLinks) ? tenantConfig.tenantQuickLinks : [];
   const sidebarUsesLightText = ["#ffffff", "#f8fafc", "#f8fbff"].includes(sidebarTextColor.toLowerCase());
   const navMutedColor = sidebarUsesLightText ? "rgba(255,255,255,0.82)" : "rgba(15,23,42,0.66)";
-  const navHoverColor = sidebarUsesLightText ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
-  const navActiveColor = sidebarUsesLightText ? "rgba(255,255,255,0.14)" : "rgba(37,99,235,0.14)";
-  const dividerColor = sidebarUsesLightText ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+  const navHoverColor = sidebarUsesLightText ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.08)";
+  const navActiveColor = sidebarUsesLightText ? "rgba(255,255,255,0.18)" : "rgba(37,99,235,0.14)";
+  const dividerColor = sidebarUsesLightText ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.08)";
   const systemAlertStyles = activeSystemAlert?.type === "urgent"
     ? "border-rose-200 bg-rose-50 text-rose-900"
     : activeSystemAlert?.type === "info"
@@ -561,8 +561,8 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen w-full bg-slate-50 dark:bg-slate-950">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r md:flex" style={{ backgroundColor: sidebarBackgroundColor, borderColor: dividerColor, color: sidebarTextColor }}>
-        <div className="flex min-h-24 items-center border-b bg-white px-4 py-4" style={{ borderColor: "rgba(15,23,42,0.08)" }}>
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r md:flex" style={{ background: sidebarBackgroundColor, borderColor: dividerColor, color: sidebarTextColor }}>
+        <div className="flex min-h-24 items-center border-b bg-white px-4 py-4 shadow-[inset_0_-1px_0_rgba(15,23,42,0.06)]" style={{ borderColor: "rgba(15,23,42,0.08)" }}>
           <SidebarBrand />
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-6 pb-32">
@@ -571,7 +571,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
             <NavLinks />
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 border-t p-4" style={{ borderColor: dividerColor, backgroundColor: sidebarBackgroundColor }}>
+        <div className="absolute inset-x-0 bottom-0 border-t p-4" style={{ borderColor: dividerColor, background: "rgba(6,16,46,0.18)" }}>
           {tenantQuickLinks.length > 0 && <ShortcutLinks />}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -615,7 +615,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="flex w-72 flex-col p-0" style={{ backgroundColor: sidebarBackgroundColor, color: sidebarTextColor }}>
+              <SheetContent side="left" className="flex w-72 flex-col p-0" style={{ background: sidebarBackgroundColor, color: sidebarTextColor }}>
                 <div className="flex min-h-24 items-center border-b bg-white px-4 py-4" style={{ borderColor: "rgba(15,23,42,0.08)" }}>
                   <SidebarBrand />
                 </div>
