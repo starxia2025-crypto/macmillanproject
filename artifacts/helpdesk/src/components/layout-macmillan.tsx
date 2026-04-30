@@ -327,9 +327,9 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const tenantConfig = user as any;
   const activeSchoolName = (user as any).schoolName || user.tenantName || "Macmillan Iberia";
   const activeSchoolLogo = typeof tenantConfig.tenantLogoUrl === "string" ? tenantConfig.tenantLogoUrl.trim() : "";
-  const brandTextColor = tenantConfig.tenantPrimaryColor || "#0f172a";
-  const sidebarBackgroundColor = tenantConfig.tenantSidebarBackgroundColor || "#ffffff";
-  const sidebarTextColor = tenantConfig.tenantSidebarTextColor || "#0f172a";
+  const brandTextColor = tenantConfig.tenantPrimaryColor || "#0f2f72";
+  const sidebarBackgroundColor = tenantConfig.tenantSidebarBackgroundColor || "#172b6a";
+  const sidebarTextColor = tenantConfig.tenantSidebarTextColor || "#f8fbff";
   const tenantName = typeof tenantConfig.tenantName === "string" ? tenantConfig.tenantName.trim() : "";
   const isMacmillanSupportUser = user.role === "tecnico" && tenantName.toLowerCase().includes("macmillan");
   const ticketsMenuLabel =
@@ -343,10 +343,11 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const dashboardMenuLabel = "Dashboard";
   const mochilasMenuLabel = isMacmillanSupportUser ? "Pedidos (mochilas)" : "Consulta de Mochilas";
   const tenantQuickLinks = Array.isArray(tenantConfig.tenantQuickLinks) ? tenantConfig.tenantQuickLinks : [];
-  const navMutedColor = sidebarTextColor === "#ffffff" || sidebarTextColor === "#f8fafc" ? "rgba(255,255,255,0.72)" : "rgba(15,23,42,0.66)";
-  const navHoverColor = sidebarTextColor === "#ffffff" || sidebarTextColor === "#f8fafc" ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
-  const navActiveColor = sidebarTextColor === "#ffffff" || sidebarTextColor === "#f8fafc" ? "rgba(255,255,255,0.16)" : "rgba(37,99,235,0.14)";
-  const dividerColor = sidebarTextColor === "#ffffff" || sidebarTextColor === "#f8fafc" ? "rgba(255,255,255,0.14)" : "rgba(15,23,42,0.08)";
+  const sidebarUsesLightText = ["#ffffff", "#f8fafc", "#f8fbff"].includes(sidebarTextColor.toLowerCase());
+  const navMutedColor = sidebarUsesLightText ? "rgba(255,255,255,0.82)" : "rgba(15,23,42,0.66)";
+  const navHoverColor = sidebarUsesLightText ? "rgba(255,255,255,0.08)" : "rgba(15,23,42,0.08)";
+  const navActiveColor = sidebarUsesLightText ? "rgba(255,255,255,0.14)" : "rgba(37,99,235,0.14)";
+  const dividerColor = sidebarUsesLightText ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
   const systemAlertStyles = activeSystemAlert?.type === "urgent"
     ? "border-rose-200 bg-rose-50 text-rose-900"
     : activeSystemAlert?.type === "info"

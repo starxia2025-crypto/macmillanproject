@@ -138,6 +138,7 @@ export default function MacmillanLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [supportSent, setSupportSent] = useState(false);
+  const currentYear = new Date().getFullYear();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -461,8 +462,8 @@ export default function MacmillanLogin() {
               <img src={meeLogo} alt="Macmillan Education" className="h-7 w-auto brightness-0 invert" />
               <span className="font-medium">macmillan education</span>
             </div>
-            <span className="font-medium">bridge.macmillan.es</span>
-            <span>&copy; 2024 Macmillan Education. Todos los derechos reservados.</span>
+            <span className="font-medium">Bridge</span>
+            <span>&copy; {currentYear} Macmillan Education. Todos los derechos reservados.</span>
           </div>
         </footer>
 
