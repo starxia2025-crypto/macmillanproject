@@ -341,7 +341,6 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
           ? "Bandeja de tickets"
           : "Tickets de consulta";
   const dashboardMenuLabel = "Dashboard";
-  const mochilasMenuLabel = isMacmillanSupportUser ? "Pedidos (mochilas)" : "Consulta de Mochilas";
   const tenantQuickLinks = Array.isArray(tenantConfig.tenantQuickLinks) ? tenantConfig.tenantQuickLinks : [];
   const sidebarUsesLightText = ["#ffffff", "#f8fafc", "#f8fbff"].includes(sidebarTextColor.toLowerCase());
   const navMutedColor = sidebarUsesLightText ? "rgba(255,255,255,0.86)" : "rgba(15,23,42,0.66)";
@@ -416,7 +415,6 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
     { href: "/tickets", label: ticketsMenuLabel, icon: Ticket, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
     { href: "/assistance/request", label: "Solicitar asistencia", icon: ClipboardPlus, roles: ["admin_cliente", "manager", "usuario_cliente"] },
     { href: "/assistance/inbox", label: "Bandeja de asistencias", icon: CalendarClock, roles: ["superadmin", "tecnico"] },
-    { href: "/mochilas", label: mochilasMenuLabel, icon: LifeBuoy, roles: ["superadmin", "tecnico"], externalWebNotice: true },
     { href: "/integrations/apis", label: "APIs externas", icon: Cable, roles: ["superadmin", "tecnico"] },
     { href: "/portal", label: "Centro de ayuda", icon: BookOpen, roles: ["superadmin", "admin_cliente", "manager", "tecnico", "usuario_cliente", "visor_cliente"] },
     { href: "/clients", label: "Colegios", icon: Building2, roles: ["superadmin", "tecnico"] },
@@ -429,44 +427,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
     <div className="flex w-full flex-col gap-1">
       {navItems.map((item) => {
         const Icon = item.icon;
-        const isExternalAction = item.externalWebNotice;
-        const isActive = !isExternalAction && location.startsWith(item.href);
-        const handleNavClick = async () => {
-          if (!isExternalAction) return;
-
-          toast({
-            title: "No disponible en la web",
-            description: "La consulta de Mochilas no esta disponible en esta version web.",
-            variant: "destructive",
-          });
-        };
-
-        if (isExternalAction) {
-          return (
-            <button
-              key={item.href}
-              type="button"
-              className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left transition-all duration-200"
-              style={{
-                backgroundColor: "transparent",
-                color: navMutedColor,
-                fontWeight: 500,
-              }}
-              onClick={() => {
-                void handleNavClick();
-              }}
-              onMouseEnter={(event) => {
-                event.currentTarget.style.backgroundColor = navHoverColor;
-              }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.backgroundColor = "transparent";
-              }}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        }
+        const isActive = location.startsWith(item.href);
 
         return (
           <Link key={item.href} href={item.href}>
