@@ -1,3 +1,11 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <rect width="180" height="180" rx="36" fill="#0F2F72"/>
+  <path
+    d="M58 42H88C113.405 42 134 62.5949 134 88C134 113.405 113.405 134 88 134H58V42Z"
+    fill="white"
+  />
+  <path
+    d="M82 62H89.5C101.374 62 111 71.6259 111 83.5C111 95.3741 101.374 105 89.5 105H82V62Z"
+    fill="#FF7A1A"
+  />
 </svg>

@@ -327,8 +327,8 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const tenantConfig = user as any;
   const activeSchoolName = (user as any).schoolName || user.tenantName || "Macmillan Iberia";
   const activeSchoolLogo = typeof tenantConfig.tenantLogoUrl === "string" ? tenantConfig.tenantLogoUrl.trim() : "";
-  const brandTextColor = "#0f2f72";
-  const sidebarBackgroundColor = "linear-gradient(180deg, #182b6b 0%, #10245d 55%, #0a1c4a 100%)";
+  const brandTextColor = "#ff7a1a";
+  const sidebarBackgroundColor = "linear-gradient(115deg, #061a56 0%, #0c2f8a 42%, #1d59d9 100%)";
   const sidebarTextColor = "#f8fbff";
   const tenantName = typeof tenantConfig.tenantName === "string" ? tenantConfig.tenantName.trim() : "";
   const isMacmillanSupportUser = user.role === "tecnico" && tenantName.toLowerCase().includes("macmillan");
@@ -344,10 +344,10 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
   const mochilasMenuLabel = isMacmillanSupportUser ? "Pedidos (mochilas)" : "Consulta de Mochilas";
   const tenantQuickLinks = Array.isArray(tenantConfig.tenantQuickLinks) ? tenantConfig.tenantQuickLinks : [];
   const sidebarUsesLightText = ["#ffffff", "#f8fafc", "#f8fbff"].includes(sidebarTextColor.toLowerCase());
-  const navMutedColor = sidebarUsesLightText ? "rgba(255,255,255,0.82)" : "rgba(15,23,42,0.66)";
-  const navHoverColor = sidebarUsesLightText ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.08)";
-  const navActiveColor = sidebarUsesLightText ? "rgba(255,255,255,0.18)" : "rgba(37,99,235,0.14)";
-  const dividerColor = sidebarUsesLightText ? "rgba(255,255,255,0.1)" : "rgba(15,23,42,0.08)";
+  const navMutedColor = sidebarUsesLightText ? "rgba(255,255,255,0.86)" : "rgba(15,23,42,0.66)";
+  const navHoverColor = sidebarUsesLightText ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
+  const navActiveColor = sidebarUsesLightText ? "rgba(255,255,255,0.2)" : "rgba(37,99,235,0.14)";
+  const dividerColor = sidebarUsesLightText ? "rgba(255,255,255,0.12)" : "rgba(15,23,42,0.08)";
   const systemAlertStyles = activeSystemAlert?.type === "urgent"
     ? "border-rose-200 bg-rose-50 text-rose-900"
     : activeSystemAlert?.type === "info"
@@ -544,7 +544,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
 
   const SidebarBrand = () => (
     <Link href="/dashboard">
-      <span className="flex w-full cursor-pointer items-center gap-4">
+      <span className="flex w-full cursor-pointer select-none items-center gap-4 outline-none">
         <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-transparent">
           {activeSchoolLogo ? (
             <img src={activeSchoolLogo} alt={activeSchoolName} className="h-full w-full object-contain" />
@@ -553,7 +553,7 @@ export function MacmillanLayout({ children }: { children: React.ReactNode }) {
           )}
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-2xl font-bold leading-tight tracking-tight" style={{ color: brandTextColor }}>{activeSchoolName}</span>
+          <span className="block truncate text-2xl font-bold leading-tight tracking-tight" style={{ color: brandTextColor, caretColor: "transparent" }}>{activeSchoolName}</span>
         </span>
       </span>
     </Link>
