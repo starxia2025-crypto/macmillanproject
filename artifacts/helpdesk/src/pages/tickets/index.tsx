@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { TicketStatus, useAssignTicket, useChangeTicketStatus, useGetMe, useListTickets } from "@workspace/api-client-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -47,7 +47,7 @@ const bulkStatusOptions = ["nuevo", "pendiente", "en_revision", "en_proceso", "e
 const bulkInquiryOptions = [
   "Alumno sin libros",
   "No puede acceder",
-  "Problemas de activación",
+  "Problemas de activaciÃ³n",
   "No funciona el libro",
   "Otro",
 ] as const;
@@ -70,14 +70,14 @@ const importPhaseMeta: Record<BulkImportPhase, { value: number; label: string; h
   finalizing: {
     value: 96,
     label: "Actualizando la bandeja",
-    helper: "Cerrando la importación y refrescando la lista de consultas.",
+    helper: "Cerrando la importaciÃ³n y refrescando la lista de consultas.",
   },
 };
 
 function fixMojibake(value: string) {
   let next = value;
 
-  if (/[ÃÂâ]/.test(next)) {
+  if (/[ÃƒÃ‚Ã¢]/.test(next)) {
     try {
       next = new TextDecoder("utf-8", { fatal: false }).decode(Uint8Array.from(next, (char) => char.charCodeAt(0) & 0xff)) || next;
     } catch {
@@ -86,38 +86,38 @@ function fixMojibake(value: string) {
   }
 
   const replacements: Array<[RegExp, string]> = [
-    [/activaci\?n/gi, "activación"],
-    [/informaci\?n/gi, "información"],
-    [/resoluci\?n/gi, "resolución"],
-    [/educaci\?n/gi, "educación"],
-    [/aplicaci\?n/gi, "aplicación"],
-    [/descripci\?n/gi, "descripción"],
-    [/asignaci\?n/gi, "asignación"],
-    [/gesti\?n/gi, "gestión"],
-    [/sesi\?n/gi, "sesión"],
-    [/versi\?n/gi, "versión"],
-    [/revisi\?n/gi, "revisión"],
-    [/categori\?a/gi, "categoría"],
-    [/contrase\?a/gi, "contraseña"],
-    [/espa\?ol/gi, "español"],
-    [/atenci\?n/gi, "atención"],
-    [/soluci\?n/gi, "solución"],
-    [/Inténtalo/gi, "Inténtalo"],
-    [/Descripción/gi, "Descripción"],
-    [/Categoría/gi, "Categoría"],
-    [/categoría/gi, "categoría"],
-    [/Revisión/gi, "Revisión"],
-    [/revisión/gi, "revisión"],
-    [/devolución/gi, "devolución"],
-    [/verán/gi, "verán"],
-    [/Ã¡/g, "á"],
-    [/Ã©/g, "é"],
-    [/Ã­/g, "í"],
-    [/Ã³/g, "ó"],
-    [/Ãº/g, "ú"],
-    [/Ã±/g, "ñ"],
-    [/Âº/g, "º"],
-    [/Â·/g, "·"],
+    [/activaci\?n/gi, "activaciÃ³n"],
+    [/informaci\?n/gi, "informaciÃ³n"],
+    [/resoluci\?n/gi, "resoluciÃ³n"],
+    [/educaci\?n/gi, "educaciÃ³n"],
+    [/aplicaci\?n/gi, "aplicaciÃ³n"],
+    [/descripci\?n/gi, "descripciÃ³n"],
+    [/asignaci\?n/gi, "asignaciÃ³n"],
+    [/gesti\?n/gi, "gestiÃ³n"],
+    [/sesi\?n/gi, "sesiÃ³n"],
+    [/versi\?n/gi, "versiÃ³n"],
+    [/revisi\?n/gi, "revisiÃ³n"],
+    [/categori\?a/gi, "categorÃ­a"],
+    [/contrase\?a/gi, "contraseÃ±a"],
+    [/espa\?ol/gi, "espaÃ±ol"],
+    [/atenci\?n/gi, "atenciÃ³n"],
+    [/soluci\?n/gi, "soluciÃ³n"],
+    [/IntÃ©ntalo/gi, "IntÃ©ntalo"],
+    [/DescripciÃ³n/gi, "DescripciÃ³n"],
+    [/CategorÃ­a/gi, "CategorÃ­a"],
+    [/categorÃ­a/gi, "categorÃ­a"],
+    [/RevisiÃ³n/gi, "RevisiÃ³n"],
+    [/revisiÃ³n/gi, "revisiÃ³n"],
+    [/devoluciÃ³n/gi, "devoluciÃ³n"],
+    [/verÃ¡n/gi, "verÃ¡n"],
+    [/ÃƒÂ¡/g, "Ã¡"],
+    [/ÃƒÂ©/g, "Ã©"],
+    [/ÃƒÂ­/g, "Ã­"],
+    [/ÃƒÂ³/g, "Ã³"],
+    [/ÃƒÂº/g, "Ãº"],
+    [/ÃƒÂ±/g, "Ã±"],
+    [/Ã‚Âº/g, "Âº"],
+    [/Ã‚Â·/g, "Â·"],
   ];
 
   return replacements.reduce((current, [pattern, replacement]) => current.replace(pattern, replacement), next);
@@ -253,8 +253,8 @@ function buildBulkImportTemplateRow(user: { email?: string | null; schoolName?: 
     "10125633",
     "2153",
     "Primaria",
-    "5º",
-    "Inglés",
+    "5Âº",
+    "InglÃ©s",
     "Intentado en dos navegadores",
   ] as const;
 }
@@ -298,7 +298,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       allowBlank: false,
       formulae: [`"${bulkSubjectOptions.join(",")}"`],
       showErrorMessage: true,
-      errorTitle: "Valor no válido",
+      errorTitle: "Valor no vÃ¡lido",
       error: "Selecciona uno de los valores permitidos para tipo_sujeto.",
     };
     worksheet.getCell(`F${row}`).dataValidation = {
@@ -306,7 +306,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       allowBlank: false,
       formulae: [`"${bulkPriorityOptions.join(",")}"`],
       showErrorMessage: true,
-      errorTitle: "Valor no válido",
+      errorTitle: "Valor no vÃ¡lido",
       error: "Selecciona una prioridad permitida.",
     };
     worksheet.getCell(`G${row}`).dataValidation = {
@@ -314,7 +314,7 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       allowBlank: false,
       formulae: [`"${bulkStatusOptions.join(",")}"`],
       showErrorMessage: true,
-      errorTitle: "Valor no válido",
+      errorTitle: "Valor no vÃ¡lido",
       error: "Selecciona uno de los estados permitidos.",
     };
     worksheet.getCell(`H${row}`).dataValidation = {
@@ -322,16 +322,16 @@ async function downloadBulkTemplate(user: { email?: string | null; schoolName?: 
       allowBlank: false,
       formulae: [`"${bulkInquiryOptions.join(",")}"`],
       showErrorMessage: true,
-      errorTitle: "Valor no válido",
+      errorTitle: "Valor no vÃ¡lido",
       error: "Selecciona uno de los tipos de consulta permitidos.",
     };
   }
 
   const helpSheet = workbook.addWorksheet("Ayuda");
   helpSheet.addRows([
-    ["Campo", "Qué debe contener"],
+    ["Campo", "QuÃ© debe contener"],
     ["red_educativa", "Red educativa destino en el sistema. Ejemplo: Edelvives."],
-    ["colegio", "Nombre visible del colegio para el ticket y las estadísticas. No crea colegios nuevos en el sistema."],
+    ["colegio", "Nombre visible del colegio para el ticket y las estadÃ­sticas. No crea colegios nuevos en el sistema."],
     ["tipo_sujeto", "alumno, docente o sobre_mi_cuenta"],
     ["prioridad", "baja, media, alta o urgente"],
     ["estado", "nuevo, pendiente, en_revision, en_proceso, esperando_cliente, resuelto o cerrado"],
@@ -388,7 +388,7 @@ function SupportTicketCard({
       });
       toast({
         title: "MEE Admin abierto",
-        description: "Se ha abierto la web corporativa en una nueva pestaña y se ha intentado copiar el email del alumno.",
+        description: "Se ha abierto la web corporativa en una nueva pestaÃ±a y se ha intentado copiar el email del alumno.",
       });
       return;
     }
@@ -411,7 +411,7 @@ function SupportTicketCard({
 
             <div>
               <h3 className="line-clamp-2 text-lg font-semibold text-slate-900">{safeDisplayText(ticket.title)}</h3>
-              <p className="mt-1 text-sm text-slate-500">{school} Â· {inquiryType}</p>
+              <p className="mt-1 text-sm text-slate-500">{school} Ã‚Â· {inquiryType}</p>
             </div>
 
             <div className="grid gap-3 text-sm text-slate-500 sm:grid-cols-3">
@@ -575,7 +575,7 @@ export default function Tickets() {
 
       setImportPhase("finalizing");
       toast({
-        title: "Importación completada",
+        title: "ImportaciÃ³n completada",
         description: `Se han creado ${payload?.createdCount ?? 0} consultas${payload?.warnings?.length ? ` y ${payload.warnings.length} filas necesitaron ajuste` : ""}.`,
       });
       setSelectedImportFile(null);
@@ -583,7 +583,7 @@ export default function Tickets() {
     } catch (error) {
       toast({
         title: "No se pudo importar el Excel",
-        description: error instanceof Error ? error.message : "Revisa el archivo e inténtalo de nuevo.",
+        description: error instanceof Error ? error.message : "Revisa el archivo e intÃ©ntalo de nuevo.",
         variant: "destructive",
       });
     } finally {
@@ -768,14 +768,14 @@ export default function Tickets() {
                 <DialogTrigger asChild>
                   <Button variant="outline" className="gap-2">
                     <Upload className="h-4 w-4" />
-                    Importación masiva
+                    ImportaciÃ³n masiva
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-xl">
                   <DialogHeader>
-                    <DialogTitle>Importación masiva de consultas</DialogTitle>
+                    <DialogTitle>ImportaciÃ³n masiva de consultas</DialogTitle>
                     <DialogDescription>
-                      Descarga la plantilla, completa una fila por consulta y súbela aquí cuando la tengas lista.
+                      Descarga la plantilla, completa una fila por consulta y sÃºbela aquÃ­ cuando la tengas lista.
                     </DialogDescription>
                   </DialogHeader>
 
@@ -966,7 +966,7 @@ export default function Tickets() {
                       <div className="font-medium text-slate-900 dark:text-slate-100 mb-1 line-clamp-1">{safeDisplayText(ticket.title)}</div>
                       <div className="text-xs text-slate-500 flex items-center gap-2">
                         <span className="truncate max-w-[200px]">{school}</span>
-                        <span>Â·</span>
+                        <span>Ã‚Â·</span>
                         <span>{inquiryType}</span>
                       </div>
                       {studentEmail ? <div className="mt-1 text-xs text-slate-500">Alumno afectado: {studentEmail}</div> : null}

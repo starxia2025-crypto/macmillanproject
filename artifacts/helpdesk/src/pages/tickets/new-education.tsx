@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   ApiError,
@@ -50,8 +50,8 @@ const educationTicketSchema = z.object({
   studentEnrollment: z.string().optional(),
   stage: z.string().optional(),
   course: z.string().optional(),
-  subject: z.enum(["Inglés", "Alemán", "Francés", "Todas"]).optional(),
-  inquiryType: z.enum(["Alumno sin libros", "No puede acceder", "Problemas de activación", "No funciona el libro", "Otro"]).optional(),
+  subject: z.enum(["InglÃ©s", "AlemÃ¡n", "FrancÃ©s", "Todas"]).optional(),
+  inquiryType: z.enum(["Alumno sin libros", "No puede acceder", "Problemas de activaciÃ³n", "No funciona el libro", "Otro"]).optional(),
   description: z.string().optional(),
   observations: z.string().optional(),
   priority: z.enum(["baja", "media", "alta", "urgente"] as const).optional(),
@@ -107,7 +107,7 @@ const BLINK_PASSWORD_URL = "https://www.blinklearning.com/v/1774948299/themes/tm
 
 function inferMochilaDescription(record: MochilaLookupResult["records"][number]) {
   if (record.description?.trim()) return record.description.trim();
-  return (record.token?.trim().length ?? 0) > 15 ? "Inglés" : "Francés/Alemán";
+  return (record.token?.trim().length ?? 0) > 15 ? "InglÃ©s" : "FrancÃ©s/AlemÃ¡n";
 }
 
 function getTokenLength(record: MochilaLookupResult["records"][number]) {
@@ -222,7 +222,7 @@ export default function NewEducationTicket() {
       studentEnrollment: "",
       stage: "",
       course: "",
-      subject: "Inglés",
+      subject: "InglÃ©s",
       inquiryType: "Alumno sin libros",
       description: "",
       observations: "",
@@ -414,7 +414,7 @@ export default function NewEducationTicket() {
       onError: (error) => {
         toast({
           title: "No se pudo crear la consulta",
-          description: error instanceof Error ? error.message : "Revisa los datos e inténtalo de nuevo.",
+          description: error instanceof Error ? error.message : "Revisa los datos e intÃ©ntalo de nuevo.",
           variant: "destructive",
         });
       },
@@ -557,8 +557,8 @@ export default function NewEducationTicket() {
       });
     } catch {
       toast({
-        title: "Abriendo recuperación de contraseña",
-        description: "Si no se copia automáticamente, pégalo manualmente en la página externa.",
+        title: "Abriendo recuperaciÃ³n de contraseÃ±a",
+        description: "Si no se copia automÃ¡ticamente, pÃ©galo manualmente en la pÃ¡gina externa.",
       });
     }
 
@@ -570,7 +570,7 @@ export default function NewEducationTicket() {
       FORGOT_PASSWORD_URL,
       studentEmail.trim(),
       "Correo del docente copiado",
-      "Se ha copiado el email de acceso del docente para que puedas pegarlo en la pantalla de recuperación."
+      "Se ha copiado el email de acceso del docente para que puedas pegarlo en la pantalla de recuperaciÃ³n."
     );
   }
 
@@ -588,7 +588,7 @@ export default function NewEducationTicket() {
       FORGOT_PASSWORD_URL,
       mochilaLookup?.studentEmail?.trim() || studentEmail.trim(),
       "Correo del alumno copiado",
-      "Se ha copiado el email del alumno para que puedas pegarlo en la recuperación de contraseña de Inglés."
+      "Se ha copiado el email del alumno para que puedas pegarlo en la recuperaciÃ³n de contraseÃ±a de InglÃ©s."
     );
   }
 
@@ -741,7 +741,7 @@ export default function NewEducationTicket() {
       form.setError("description", {
         type: "manual",
         message: kind === "registration"
-          ? "Añade una breve explicación para la solicitud de alta"
+          ? "AÃ±ade una breve explicaciÃ³n para la solicitud de alta"
           : "Describe brevemente lo que le sucede al docente",
       });
       return;
@@ -768,9 +768,9 @@ export default function NewEducationTicket() {
           `Informador: ${user?.email ?? "-"}`,
           `Prioridad: ${values.priority ?? TicketPriority.media}`,
           kind === "registration"
-            ? "Motivo: Solicitud de alta o activación inicial para docente."
+            ? "Motivo: Solicitud de alta o activaciÃ³n inicial para docente."
             : "Motivo: El docente no puede acceder a la plataforma.",
-          `Descripción: ${teacherDescription}`,
+          `DescripciÃ³n: ${teacherDescription}`,
         ].join("\n"),
         priority: values.priority ?? TicketPriority.media,
         category: kind === "registration" ? "alta_docente" : "acceso_docente",
@@ -883,7 +883,7 @@ export default function NewEducationTicket() {
           school: schoolName,
           studentEmail: normalizedStudentEmail,
           reporterEmail: user?.email ?? null,
-          inquiryType: "Problemas de activación",
+          inquiryType: "Problemas de activaciÃ³n",
           mochilaLookup: null,
           activationRequested: true,
         },
@@ -983,7 +983,7 @@ export default function NewEducationTicket() {
           reporterEmail ? `Informador: ${reporterEmail}` : null,
           "Consulta sobre: Docente",
           `Prioridad: ${data.priority ?? TicketPriority.media}`,
-          `Descripción: ${data.description}`,
+          `DescripciÃ³n: ${data.description}`,
         ].filter(Boolean).join("\n")
       : data.subjectType === "SobreMiCuenta"
       ? [
@@ -992,7 +992,7 @@ export default function NewEducationTicket() {
           reporterEmail ? `Informador: ${reporterEmail}` : null,
           "Consulta sobre: Sobre mi cuenta",
           `Prioridad: ${data.priority ?? TicketPriority.media}`,
-          `Descripción: ${data.description}`,
+          `DescripciÃ³n: ${data.description}`,
         ].filter(Boolean).join("\n")
       : shouldUseSimplifiedAlumnoFlow
       ? [
@@ -1012,12 +1012,12 @@ export default function NewEducationTicket() {
           `${data.subjectType}: ${normalizedAffectedEmail}`,
           reporterEmail ? `Informador: ${reporterEmail}` : null,
           `Consulta sobre: ${data.subjectType}`,
-          data.studentEnrollment ? `Matrícula: ${data.studentEnrollment}` : null,
+          data.studentEnrollment ? `MatrÃ­cula: ${data.studentEnrollment}` : null,
           `Etapa: ${data.stage}`,
           `Curso: ${data.course}`,
           `Asignatura: ${data.subject}`,
           `Tipo de consulta: ${data.inquiryType}`,
-          `Descripción: ${data.description}`,
+          `DescripciÃ³n: ${data.description}`,
           data.observations ? `Observaciones: ${data.observations}` : null,
         ].filter(Boolean).join("\n");
 
@@ -1065,7 +1065,7 @@ export default function NewEducationTicket() {
 
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Nueva consulta educativa</h1>
-        <p className="text-slate-500 mt-1">Registra una consulta de forma guiada para que el equipo técnico pueda atenderla con rapidez.</p>
+        <p className="text-slate-500 mt-1">Registra una consulta de forma guiada para que el equipo tÃ©cnico pueda atenderla con rapidez.</p>
       </div>
 
       <Form {...form}>
@@ -1186,7 +1186,7 @@ export default function NewEducationTicket() {
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Selecciona una opción" />
+                          <SelectValue placeholder="Selecciona una opciÃ³n" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -1240,9 +1240,9 @@ export default function NewEducationTicket() {
                     />
 
                     <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                      <p className="text-sm font-semibold text-slate-900">Tu consulta se tratará con confidencialidad</p>
+                      <p className="text-sm font-semibold text-slate-900">Tu consulta se tratarÃ¡ con confidencialidad</p>
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Describe brevemente el problema y el equipo técnico lo revisará contigo.
+                        Describe brevemente el problema y el equipo tÃ©cnico lo revisarÃ¡ contigo.
                       </p>
                     </div>
                   </div>
@@ -1252,7 +1252,7 @@ export default function NewEducationTicket() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Descripción / observaciones *</FormLabel>
+                        <FormLabel>DescripciÃ³n / observaciones *</FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Describe brevemente el problema de acceso o lo que necesitas revisar..."
@@ -1272,7 +1272,7 @@ export default function NewEducationTicket() {
                   <div>
                     <h3 className="text-xl font-bold tracking-tight text-slate-950">Consulta sobre docente</h3>
                     <p className="mt-1 text-sm text-slate-500">
-                      Indica el correo del docente, la prioridad y una breve descripción para enviar la solicitud.
+                      Indica el correo del docente, la prioridad y una breve descripciÃ³n para enviar la solicitud.
                     </p>
                   </div>
 
@@ -1360,7 +1360,7 @@ export default function NewEducationTicket() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-900">Seguro</p>
-                          <p className="mt-1 text-xs leading-6 text-slate-500">Tus datos están protegidos y solo son visibles para personal autorizado.</p>
+                          <p className="mt-1 text-xs leading-6 text-slate-500">Tus datos estÃ¡n protegidos y solo son visibles para personal autorizado.</p>
                         </div>
                       </div>
                     </div>
@@ -1370,8 +1370,8 @@ export default function NewEducationTicket() {
                           <Clock3 className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">Rápido</p>
-                          <p className="mt-1 text-xs leading-6 text-slate-500">Encuentra la información que necesitas en segundos, sin complicaciones.</p>
+                          <p className="text-sm font-semibold text-slate-900">RÃ¡pido</p>
+                          <p className="mt-1 text-xs leading-6 text-slate-500">Encuentra la informaciÃ³n que necesitas en segundos, sin complicaciones.</p>
                         </div>
                       </div>
                     </div>
@@ -1382,7 +1382,7 @@ export default function NewEducationTicket() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-900">Soporte</p>
-                          <p className="mt-1 text-xs leading-6 text-slate-500">Si tienes dudas, nuestro equipo está aquí para ayudarte.</p>
+                          <p className="mt-1 text-xs leading-6 text-slate-500">Si tienes dudas, nuestro equipo estÃ¡ aquÃ­ para ayudarte.</p>
                         </div>
                       </div>
                     </div>
@@ -1403,7 +1403,7 @@ export default function NewEducationTicket() {
                       <Backpack className="h-10 w-10 text-violet-700" />
                     </div>
                     <div>
-                      <h3 className="text-5xl font-bold tracking-tight text-slate-950">Búsqueda de Mochilas</h3>
+                      <h3 className="text-5xl font-bold tracking-tight text-slate-950">BÃºsqueda de Mochilas</h3>
                         <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
                           Consulta datos de acceso y libros activados usando el correo del alumno o el pedido.
                         </p>
@@ -1601,9 +1601,9 @@ export default function NewEducationTicket() {
                                 <KeyRound className="h-6 w-6" />
                               </div>
                               <div>
-                                <p className="text-lg font-bold tracking-tight text-slate-950 sm:text-[0.90rem]">¿Intenta recuperar la contraseña del alumno?</p>
+                                <p className="text-lg font-bold tracking-tight text-slate-950 sm:text-[0.90rem]">Â¿Intenta recuperar la contraseÃ±a del alumno?</p>
                                   <p className="mt-1 text-sm leading-7 text-slate-600">
-                                    Desde aquí puedes intentar recuperar sus contraseñas a las plataformas.
+                                    Desde aquÃ­ puedes intentar recuperar sus contraseÃ±as a las plataformas.
                                   </p>
                               </div>
                             </div>
@@ -1615,7 +1615,7 @@ export default function NewEducationTicket() {
                                     <div className="flex items-start gap-3">
                                       <LanguageFlag kind="english" />
                                       <div>
-                                        <p className="text-sm font-semibold text-slate-900">Inglés</p>
+                                        <p className="text-sm font-semibold text-slate-900">InglÃ©s</p>
                                         <p className="mt-1 text-sm text-slate-600">{studentEnglishCredential.password || "-"}</p>
                                       </div>
                                     </div>
@@ -1625,7 +1625,7 @@ export default function NewEducationTicket() {
                                       className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
                                       onClick={handleForgotStudentEnglishPassword}
                                     >
-                                      Cambiar contraseña
+                                      Cambiar contraseÃ±a
                                     </Button>
                                   </div>
                                 </div>
@@ -1637,7 +1637,7 @@ export default function NewEducationTicket() {
                                     <div className="flex items-start gap-3">
                                       <LanguageFlag kind="frde" />
                                       <div>
-                                        <p className="text-sm font-semibold text-slate-900">Francés/alemán</p>
+                                        <p className="text-sm font-semibold text-slate-900">FrancÃ©s/alemÃ¡n</p>
                                         <p className="mt-1 text-sm text-slate-600">{studentBlinkCredential.password || "-"}</p>
                                       </div>
                                     </div>
@@ -1647,7 +1647,7 @@ export default function NewEducationTicket() {
                                       className="h-10 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 text-sm text-white hover:from-amber-600 hover:to-orange-600"
                                       onClick={handleForgotStudentBlinkPassword}
                                     >
-                                      Cambiar contraseña
+                                      Cambiar contraseÃ±a
                                     </Button>
                                   </div>
                                 </div>
@@ -1665,7 +1665,7 @@ export default function NewEducationTicket() {
                               <Users className="h-6 w-6" />
                             </div>
                             <div>
-                              <p className="text-2xl font-bold tracking-tight text-slate-950">¿Aún continúas sin poder acceder?</p>
+                              <p className="text-2xl font-bold tracking-tight text-slate-950">Â¿AÃºn continÃºas sin poder acceder?</p>
                               <p className="text-sm text-slate-600">Nuestro equipo de soporte puede ayudarte.</p>
                             </div>
                           </div>
@@ -1691,11 +1691,11 @@ export default function NewEducationTicket() {
                           <table className="w-full text-sm">
                             <thead className="bg-[#f3efff] text-left text-[11px] uppercase tracking-wide text-slate-500">
                               <tr>
-                                <th className="px-4 py-3 font-semibold">Descripción</th>
+                                <th className="px-4 py-3 font-semibold">DescripciÃ³n</th>
                                 <th className="px-4 py-3 font-semibold">ISBN</th>
                                 <th className="px-4 py-3 font-semibold">Pedido</th>
                                 <th className="px-4 py-3 font-semibold">Goog</th>
-                                <th className="px-4 py-3 font-semibold">Código de libro</th>
+                                <th className="px-4 py-3 font-semibold">CÃ³digo de libro</th>
                                 <th className="px-4 py-3 font-semibold text-right">Acciones</th>
                               </tr>
                             </thead>
@@ -1736,8 +1736,8 @@ export default function NewEducationTicket() {
                                             variant={isSelectedForReturn ? "default" : "outline"}
                                             className={isSelectedForReturn ? "h-10 w-10 rounded-xl bg-violet-600 text-white hover:bg-violet-700" : "h-10 w-10 rounded-xl border-violet-200 text-violet-600 hover:bg-violet-50"}
                                             onClick={() => toggleLineAction(record.key, "return")}
-                                            title="Devolución"
-                                            aria-label="Devolución"
+                                            title="DevoluciÃ³n"
+                                            aria-label="DevoluciÃ³n"
                                           >
                                             <Undo2 className="h-4 w-4" />
                                           </Button>
@@ -1756,13 +1756,13 @@ export default function NewEducationTicket() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-white text-slate-400">
-                                ‹
+                                â€¹
                               </button>
                               <button type="button" className="flex h-8 min-w-8 items-center justify-center rounded-lg border border-violet-300 bg-violet-100 px-2 font-semibold text-violet-700">
                                 1
                               </button>
                               <button type="button" className="flex h-8 w-8 items-center justify-center rounded-lg border border-violet-200 bg-white text-slate-400">
-                                ›
+                                â€º
                               </button>
                             </div>
                           </div>
@@ -1777,7 +1777,7 @@ export default function NewEducationTicket() {
                             </div>
                             <div>
                               <p className="font-semibold text-slate-900">Seguro</p>
-                              <p className="text-sm text-slate-500">Tus datos están protegidos y solo son visibles para personal autorizado.</p>
+                              <p className="text-sm text-slate-500">Tus datos estÃ¡n protegidos y solo son visibles para personal autorizado.</p>
                             </div>
                           </div>
                         </div>
@@ -1787,8 +1787,8 @@ export default function NewEducationTicket() {
                               <Clock3 className="h-6 w-6" />
                             </div>
                             <div>
-                              <p className="font-semibold text-slate-900">Rápido</p>
-                              <p className="text-sm text-slate-500">Encuentra la información que necesitas en segundos, sin complicaciones.</p>
+                              <p className="font-semibold text-slate-900">RÃ¡pido</p>
+                              <p className="text-sm text-slate-500">Encuentra la informaciÃ³n que necesitas en segundos, sin complicaciones.</p>
                             </div>
                           </div>
                         </div>
@@ -1799,19 +1799,19 @@ export default function NewEducationTicket() {
                             </div>
                             <div>
                               <p className="font-semibold text-slate-900">Soporte</p>
-                              <p className="text-sm text-slate-500">Si tienes dudas, nuestro equipo está aquí para ayudarte.</p>
+                              <p className="text-sm text-slate-500">Si tienes dudas, nuestro equipo estÃ¡ aquÃ­ para ayudarte.</p>
                             </div>
                           </div>
                         </div>
                       </div>
                       {selectedActionItems.length > 0 && (
                         <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
-                          Se guardarán {selectedActionItems.length} línea(s) con acciones marcadas en esta consulta.
+                          Se guardarÃ¡n {selectedActionItems.length} lÃ­nea(s) con acciones marcadas en esta consulta.
                         </div>
                       )}
                       {returnsEnabled && selectedReturnItems.length > 0 && (
                         <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
-                          Se guardarán {selectedReturnItems.length} línea(s) marcadas para devolución al crear el ticket.
+                          Se guardarÃ¡n {selectedReturnItems.length} lÃ­nea(s) marcadas para devoluciÃ³n al crear el ticket.
                         </div>
                       )}
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -1820,10 +1820,10 @@ export default function NewEducationTicket() {
                           name="observations"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Descripción / observaciones adicionales</FormLabel>
+                              <FormLabel>DescripciÃ³n / observaciones adicionales</FormLabel>
                               <FormControl>
                                 <Textarea
-                                  placeholder="Si quieres, añade algún detalle adicional para el equipo técnico..."
+                                  placeholder="Si quieres, aÃ±ade algÃºn detalle adicional para el equipo tÃ©cnico..."
                                   className="min-h-[120px] resize-y bg-white"
                                   {...field}
                                 />
@@ -1865,7 +1865,7 @@ export default function NewEducationTicket() {
                         <Select onValueChange={field.onChange} defaultValue={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Selecciona una opción" />
+                              <SelectValue placeholder="Selecciona una opciÃ³n" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -1893,7 +1893,7 @@ export default function NewEducationTicket() {
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecciona una opción" />
+                            <SelectValue placeholder="Selecciona una opciÃ³n" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -1937,7 +1937,7 @@ export default function NewEducationTicket() {
                   name="studentEnrollment"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Matrícula alumno</FormLabel>
+                      <FormLabel>MatrÃ­cula alumno</FormLabel>
                       <FormControl>
                         <Input placeholder="Ej. 2153" {...field} />
                       </FormControl>
@@ -1965,7 +1965,7 @@ export default function NewEducationTicket() {
                     <FormItem>
                       <FormLabel>Curso *</FormLabel>
                       <FormControl>
-                        <Input placeholder="Ej. 2Âº ESO" {...field} />
+                        <Input placeholder="Ej. 2Ã‚Âº ESO" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -1987,9 +1987,9 @@ export default function NewEducationTicket() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Inglés">Inglés</SelectItem>
-                          <SelectItem value="Alemán">Alemán</SelectItem>
-                          <SelectItem value="Francés">Francés</SelectItem>
+                          <SelectItem value="InglÃ©s">InglÃ©s</SelectItem>
+                          <SelectItem value="AlemÃ¡n">AlemÃ¡n</SelectItem>
+                          <SelectItem value="FrancÃ©s">FrancÃ©s</SelectItem>
                           <SelectItem value="Todas">Todas</SelectItem>
                         </SelectContent>
                       </Select>
@@ -2012,7 +2012,7 @@ export default function NewEducationTicket() {
                         <SelectContent>
                           <SelectItem value="Alumno sin libros">Alumno sin libros</SelectItem>
                           <SelectItem value="No puede acceder">No puede acceder</SelectItem>
-                          <SelectItem value="Problemas de activación">Problemas de activación</SelectItem>
+                          <SelectItem value="Problemas de activaciÃ³n">Problemas de activaciÃ³n</SelectItem>
                           <SelectItem value="No funciona el libro">No funciona el libro</SelectItem>
                           <SelectItem value="Otro">Otro</SelectItem>
                         </SelectContent>
@@ -2028,10 +2028,10 @@ export default function NewEducationTicket() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Descripción de la consulta/incidencia *</FormLabel>
+                    <FormLabel>DescripciÃ³n de la consulta/incidencia *</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Cuéntanos qué ocurre, en qué plataforma y cómo reproducirlo..."
+                        placeholder="CuÃ©ntanos quÃ© ocurre, en quÃ© plataforma y cÃ³mo reproducirlo..."
                         className="min-h-[160px] resize-y"
                         {...field}
                       />
@@ -2049,7 +2049,7 @@ export default function NewEducationTicket() {
                     <FormLabel>Observaciones</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Detalles adicionales, contexto pedagógico o notas para el equipo técnico..."
+                        placeholder="Detalles adicionales, contexto pedagÃ³gico o notas para el equipo tÃ©cnico..."
                         className="min-h-[120px] resize-y"
                         {...field}
                       />
