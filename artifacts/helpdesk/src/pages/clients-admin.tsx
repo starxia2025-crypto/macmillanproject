@@ -230,9 +230,17 @@ function slugifyTenantName(name: string) {
   return base || `cliente-${Date.now()}`;
 }
 
+function createLocalId() {
+  if (typeof globalThis !== "undefined" && globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function createEmptyQuickLink(): QuickLinkDraft {
   return {
-    id: crypto.randomUUID(),
+    id: createLocalId(),
     label: "",
     url: "",
     icon: "",
@@ -243,7 +251,7 @@ function createEmptyQuickLink(): QuickLinkDraft {
 
 function createEmptySchool(): SchoolDraft {
   return {
-    localId: crypto.randomUUID(),
+    localId: createLocalId(),
     name: "",
     code: "",
     isHeadquarters: false,
@@ -273,7 +281,7 @@ function mapQuickLinksToDrafts(quickLinks?: Array<{ label: string; url: string; 
   if (!Array.isArray(quickLinks)) return [];
 
   return quickLinks.map((link) => ({
-    id: crypto.randomUUID(),
+    id: createLocalId(),
     label: link.label ?? "",
     url: link.url ?? "",
     icon: link.icon ?? "",
@@ -287,7 +295,7 @@ function mapSchoolsToDrafts(schools?: Array<{ id: number; name: string; code?: s
 
   return schools.map((school) => ({
     id: school.id,
-    localId: crypto.randomUUID(),
+    localId: createLocalId(),
     name: school.name ?? "",
     code: school.code ?? "",
     isHeadquarters: Boolean(school.isHeadquarters),
