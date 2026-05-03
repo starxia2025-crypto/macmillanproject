@@ -335,7 +335,7 @@ export default function MacmillanLogin() {
               <HeroWordmark />
 
               <p className="mt-10 max-w-[690px] text-[20px] leading-[1.7] text-white/78 sm:text-[22px] lg:text-[24px]">
-                Centraliza soporte, recursos y operaciones en una experiencia corporativa única para equipos educativos que necesitan eficiencia, trazabilidad y una capa de servicio más elegante.
+                Bridge refuerza nuestro soporte con una plataforma centralizada diseñada para ofrecer a clientes clave una experiencia de atención más cercana, trazable y personalizada.
               </p>
             </div>
 
