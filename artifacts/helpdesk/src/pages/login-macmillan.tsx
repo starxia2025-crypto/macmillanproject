@@ -74,15 +74,16 @@ function HeroWordmark() {
     <div className="max-w-[760px]">
       <div className="flex flex-wrap items-end gap-2 leading-none">
         <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
-        <span className="relative inline-flex items-end text-[48px] font-bold tracking-[-0.06em] text-[#ff7a00] drop-shadow-[0_8px_24px_rgba(255,122,0,0.18)] sm:text-[58px] lg:text-[80px]">
-          <span className="relative z-10">Bridge</span>
-          <span className="pointer-events-none absolute inset-x-0 bottom-[18%] h-[40%] rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,210,170,0.55),rgba(255,122,0,0.18)_55%,rgba(255,122,0,0)_78%)] blur-[10px] animate-[bridgeGlow_5.2s_ease-in-out_infinite]" />
-          <span className="pointer-events-none absolute inset-x-[10%] top-[8%] h-[18%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.78),rgba(255,255,255,0))] opacity-80 blur-[2px] animate-[bridgeShimmer_5.2s_ease-in-out_infinite]" />
+        <span className="relative inline-flex items-end text-[48px] font-bold tracking-[-0.06em] text-[#ff7a00] sm:text-[58px] lg:text-[80px]">
+          <span className="relative z-10 animate-[bridgeWordGlow_5.4s_ease-in-out_infinite] [text-shadow:0_0_0_rgba(255,122,0,0),0_8px_24px_rgba(255,122,0,0.14)]">
+            Bridge
+          </span>
+          <span className="pointer-events-none absolute inset-y-[8%] left-[-8%] right-[-6%] rounded-[999px] bg-[linear-gradient(102deg,rgba(255,255,255,0)_0%,rgba(255,244,231,0.02)_18%,rgba(255,255,255,0.68)_48%,rgba(255,196,145,0.28)_62%,rgba(255,255,255,0)_92%)] opacity-75 blur-[6px] animate-[bridgeWordSheen_5.4s_linear_infinite]" />
         </span>
       </div>
-      <div className="relative mt-5 h-[10px] w-[250px] overflow-hidden rounded-full">
-        <div className="absolute inset-y-[3px] left-0 right-0 rounded-full bg-white/10" />
-        <div className="absolute inset-y-0 left-0 w-[148px] rounded-full bg-[linear-gradient(90deg,rgba(255,122,0,0)_0%,rgba(255,192,133,0.7)_18%,rgba(255,122,0,1)_56%,rgba(255,209,173,0.82)_78%,rgba(255,122,0,0)_100%)] blur-[0.4px] animate-[bridgeSweep_5.2s_linear_infinite]" />
+      <div className="relative mt-5 h-[7px] w-[340px] max-w-full overflow-hidden rounded-full">
+        <div className="absolute inset-y-[2px] left-0 right-0 rounded-full bg-white/8" />
+        <div className="absolute inset-y-[1px] left-0 w-[170px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,207,170,0.55)_18%,rgba(255,122,0,0.98)_54%,rgba(255,216,186,0.72)_78%,rgba(255,255,255,0)_100%)] blur-[0.6px] animate-[bridgeSweep_5.4s_linear_infinite]" />
       </div>
       <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
@@ -101,7 +102,7 @@ function BackgroundRays() {
         {Array.from({ length: 9 }).map((_, index) => (
           <div
             key={index}
-            className="absolute left-0 h-px origin-left overflow-hidden rounded-full bg-gradient-to-r from-white/0 via-white/20 to-white/0"
+            className="absolute left-0 h-px origin-left overflow-hidden rounded-full bg-gradient-to-r from-white/0 via-white/14 to-white/0"
             style={{
               top: `${10 + index * 9}%`,
               width: `${72 + index * 4}%`,
@@ -109,9 +110,9 @@ function BackgroundRays() {
             }}
           >
             <div
-              className="absolute inset-y-0 -left-[26%] w-[18%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.7),rgba(255,255,255,0))] blur-[1px]"
+              className="absolute inset-y-0 -left-[26%] w-[18%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.52),rgba(255,255,255,0))] blur-[1px]"
               style={{
-                animation: `rayTravel ${9 + index * 0.85}s linear infinite`,
+                animation: `rayTravel ${10.5 + index * 0.85}s linear infinite`,
                 animationDelay: `${index * 0.65}s`,
               }}
             />
@@ -127,15 +128,16 @@ function CapabilityMarquee() {
   const marqueeItems = [...capabilityItems, ...capabilityItems, ...capabilityItems];
 
   return (
-    <div className="mt-12 w-full max-w-[880px] overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.06] px-4 py-4 shadow-[0_24px_80px_-48px_rgba(5,18,56,0.95)] backdrop-blur-md sm:px-5">
+    <div className="mt-12 w-full max-w-[760px] overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] px-3 py-3 shadow-[0_24px_80px_-52px_rgba(5,18,56,0.95)] backdrop-blur-md sm:px-4">
       <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
-        <div className="flex min-w-max animate-[capabilityMarquee_28s_linear_infinite] items-center gap-3 sm:gap-4">
+        <div className="flex min-w-max animate-[capabilityMarquee_26s_linear_infinite] items-center gap-4 sm:gap-5">
           {marqueeItems.map((item, index) => (
             <div
               key={`${item}-${index}`}
-              className="rounded-full border border-white/12 bg-white/[0.07] px-4 py-2.5 text-sm font-medium tracking-[0.08em] text-white/86 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:px-5 sm:text-[15px]"
+              className="flex items-center gap-4 text-sm font-medium tracking-[0.04em] text-white/76 sm:text-[15px]"
             >
-              {item}
+              <span className="whitespace-nowrap">{item}</span>
+              <span className="text-white/28">{index === marqueeItems.length - 1 ? "" : "·"}</span>
             </div>
           ))}
         </div>
@@ -282,19 +284,27 @@ export default function MacmillanLogin() {
       <style>{`
         @keyframes bridgeSweep {
           0% { transform: translateX(-105%); opacity: 0; }
-          10% { opacity: 1; }
-          52% { transform: translateX(118%); opacity: 1; }
-          68% { opacity: 0; }
+          8% { opacity: 1; }
+          58% { transform: translateX(118%); opacity: 1; }
+          74% { opacity: 0; }
           100% { transform: translateX(118%); opacity: 0; }
         }
-        @keyframes bridgeGlow {
-          0%, 36%, 100% { opacity: 0.32; transform: scaleX(0.88); }
-          46%, 60% { opacity: 0.95; transform: scaleX(1.03); }
+        @keyframes bridgeWordGlow {
+          0%, 34%, 100% {
+            text-shadow: 0 0 0 rgba(255,122,0,0), 0 8px 24px rgba(255,122,0,0.14);
+            filter: brightness(1);
+          }
+          46%, 58% {
+            text-shadow: 0 0 22px rgba(255,162,92,0.42), 0 10px 28px rgba(255,122,0,0.22);
+            filter: brightness(1.08);
+          }
         }
-        @keyframes bridgeShimmer {
-          0%, 38%, 100% { transform: translateX(-28%) scaleX(0.72); opacity: 0; }
-          48% { transform: translateX(10%) scaleX(1); opacity: 0.9; }
-          60% { transform: translateX(22%) scaleX(1.08); opacity: 0.36; }
+        @keyframes bridgeWordSheen {
+          0% { transform: translateX(-42%) skewX(-14deg); opacity: 0; }
+          12% { opacity: 0.18; }
+          42% { transform: translateX(8%) skewX(-14deg); opacity: 0.72; }
+          58% { transform: translateX(24%) skewX(-14deg); opacity: 0.26; }
+          100% { transform: translateX(42%) skewX(-14deg); opacity: 0; }
         }
         @keyframes rayTravel {
           0% { transform: translateX(0); opacity: 0; }
