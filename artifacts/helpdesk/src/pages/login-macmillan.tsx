@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BookOpenText, Eye, EyeOff, GraduationCap, Headphones, Loader2, Lock, Mail, PlugZap, UserRoundCheck } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { getDefaultRouteForRole } from "@/lib/default-route";
 import { toast } from "@/hooks/use-toast";
 import meeLogo from "@/assets/mee-logo.svg";
@@ -42,34 +42,7 @@ type CaptchaChallenge = {
   token: string;
 };
 
-const featureItems = [
-  {
-    icon: Headphones,
-    title: "Soporte",
-    description: "Tickets de consultas,\natención rápida.",
-  },
-  {
-    icon: BookOpenText,
-    title: "Recursos",
-    description: "Acceso a guías,\ndocumentación y más",
-  },
-  {
-    icon: UserRoundCheck,
-    title: "Solicitud de\nasistencia",
-    description: "Planificación y gestión\nde intervenciones",
-    glow: true,
-  },
-  {
-    icon: GraduationCap,
-    title: "Formación",
-    description: "Capacitación y\ncontenidos formativos",
-  },
-  {
-    icon: PlugZap,
-    title: "API externa",
-    description: "Conexión segura con\nnuestros sistemas",
-  },
-];
+const capabilityItems = ["Soporte", "Recursos", "Solicitud de asistencia", "Formación", "API externa"];
 
 function readRecentLoginEmails() {
   try {
@@ -98,13 +71,20 @@ function writeRecentLoginEmails(email: string) {
 
 function HeroWordmark() {
   return (
-    <div>
+    <div className="max-w-[760px]">
       <div className="flex flex-wrap items-end gap-2 leading-none">
-        <span className="text-[48px] font-semibold tracking-tight text-white sm:text-[58px] lg:text-[74px]">Macmillan</span>
-        <span className="text-[48px] font-bold tracking-tight text-[#ff7a1a] sm:text-[58px] lg:text-[74px]">Bridge</span>
+        <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
+        <span className="relative inline-flex items-end text-[48px] font-bold tracking-[-0.06em] text-[#ff7a00] drop-shadow-[0_8px_24px_rgba(255,122,0,0.18)] sm:text-[58px] lg:text-[80px]">
+          <span className="relative z-10">Bridge</span>
+          <span className="pointer-events-none absolute inset-x-0 bottom-[18%] h-[40%] rounded-full bg-[radial-gradient(circle_at_50%_50%,rgba(255,210,170,0.55),rgba(255,122,0,0.18)_55%,rgba(255,122,0,0)_78%)] blur-[10px] animate-[bridgeGlow_5.2s_ease-in-out_infinite]" />
+          <span className="pointer-events-none absolute inset-x-[10%] top-[8%] h-[18%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.78),rgba(255,255,255,0))] opacity-80 blur-[2px] animate-[bridgeShimmer_5.2s_ease-in-out_infinite]" />
+        </span>
       </div>
-      <div className="mt-4 h-1 w-14 rounded-full bg-[#ff7a1a]" />
-      <p className="mt-7 text-[24px] leading-tight text-white/95 sm:text-[28px] lg:text-[34px]">
+      <div className="relative mt-5 h-[10px] w-[250px] overflow-hidden rounded-full">
+        <div className="absolute inset-y-[3px] left-0 right-0 rounded-full bg-white/10" />
+        <div className="absolute inset-y-0 left-0 w-[148px] rounded-full bg-[linear-gradient(90deg,rgba(255,122,0,0)_0%,rgba(255,192,133,0.7)_18%,rgba(255,122,0,1)_56%,rgba(255,209,173,0.82)_78%,rgba(255,122,0,0)_100%)] blur-[0.4px] animate-[bridgeSweep_5.2s_linear_infinite]" />
+      </div>
+      <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
       </p>
     </div>
@@ -114,19 +94,51 @@ function HeroWordmark() {
 function BackgroundRays() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_76%_34%,rgba(80,170,255,0.95),rgba(42,112,230,0.74)_16%,rgba(15,54,152,0.42)_32%,rgba(7,31,103,0)_55%)]" />
-      <div className="absolute inset-y-0 left-[22%] right-0 top-[30%] opacity-80">
-        {Array.from({ length: 8 }).map((_, index) => (
+      <div className="absolute inset-0 bg-[linear-gradient(120deg,#03143f_0%,#08276e_32%,#1247a5_72%,#4c95ff_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_24%,rgba(125,195,255,0.42),rgba(53,122,244,0.22)_18%,rgba(10,40,115,0)_48%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_14%_74%,rgba(36,81,190,0.24),rgba(5,26,83,0)_36%)]" />
+      <div className="absolute inset-y-[-8%] left-[14%] right-[-16%] top-[8%] opacity-80">
+        {Array.from({ length: 9 }).map((_, index) => (
           <div
             key={index}
-            className="absolute left-0 h-px origin-left rounded-full bg-gradient-to-r from-white/0 via-white/45 to-white/0"
+            className="absolute left-0 h-px origin-left overflow-hidden rounded-full bg-gradient-to-r from-white/0 via-white/20 to-white/0"
             style={{
-              top: `${12 + index * 8}%`,
-              width: `${62 + index * 4}%`,
-              transform: `rotate(${index * 6 - 18}deg)`,
+              top: `${10 + index * 9}%`,
+              width: `${72 + index * 4}%`,
+              transform: `rotate(${index * 5 - 19}deg)`,
             }}
-          />
+          >
+            <div
+              className="absolute inset-y-0 -left-[26%] w-[18%] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,0.7),rgba(255,255,255,0))] blur-[1px]"
+              style={{
+                animation: `rayTravel ${9 + index * 0.85}s linear infinite`,
+                animationDelay: `${index * 0.65}s`,
+              }}
+            />
+          </div>
         ))}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-[linear-gradient(180deg,rgba(2,16,54,0),rgba(2,16,54,0.28)_48%,rgba(2,16,54,0.62)_100%)]" />
+    </div>
+  );
+}
+
+function CapabilityMarquee() {
+  const marqueeItems = [...capabilityItems, ...capabilityItems, ...capabilityItems];
+
+  return (
+    <div className="mt-12 w-full max-w-[880px] overflow-hidden rounded-[28px] border border-white/12 bg-white/[0.06] px-4 py-4 shadow-[0_24px_80px_-48px_rgba(5,18,56,0.95)] backdrop-blur-md sm:px-5">
+      <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
+        <div className="flex min-w-max animate-[capabilityMarquee_28s_linear_infinite] items-center gap-3 sm:gap-4">
+          {marqueeItems.map((item, index) => (
+            <div
+              key={`${item}-${index}`}
+              className="rounded-full border border-white/12 bg-white/[0.07] px-4 py-2.5 text-sm font-medium tracking-[0.08em] text-white/86 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] sm:px-5 sm:text-[15px]"
+            >
+              {item}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -267,44 +279,48 @@ export default function MacmillanLogin() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
+      <style>{`
+        @keyframes bridgeSweep {
+          0% { transform: translateX(-105%); opacity: 0; }
+          10% { opacity: 1; }
+          52% { transform: translateX(118%); opacity: 1; }
+          68% { opacity: 0; }
+          100% { transform: translateX(118%); opacity: 0; }
+        }
+        @keyframes bridgeGlow {
+          0%, 36%, 100% { opacity: 0.32; transform: scaleX(0.88); }
+          46%, 60% { opacity: 0.95; transform: scaleX(1.03); }
+        }
+        @keyframes bridgeShimmer {
+          0%, 38%, 100% { transform: translateX(-28%) scaleX(0.72); opacity: 0; }
+          48% { transform: translateX(10%) scaleX(1); opacity: 0.9; }
+          60% { transform: translateX(22%) scaleX(1.08); opacity: 0.36; }
+        }
+        @keyframes rayTravel {
+          0% { transform: translateX(0); opacity: 0; }
+          8% { opacity: 0.9; }
+          88% { opacity: 0.25; }
+          100% { transform: translateX(760%); opacity: 0; }
+        }
+        @keyframes capabilityMarquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-33.333%); }
+        }
+      `}</style>
       <div className="relative mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 lg:px-6 lg:py-5">
         <BackgroundRays />
 
         <div className="relative grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-center lg:gap-10">
-          <section className="flex min-h-0 flex-col justify-between py-2 lg:py-4">
-            <div className="max-w-[740px]">
+          <section className="flex min-h-0 flex-col justify-between py-4 lg:py-8">
+            <div className="max-w-[820px]">
               <HeroWordmark />
 
-              <p className="mt-10 max-w-[640px] text-[22px] leading-[1.55] text-white/92 sm:text-[24px] lg:text-[26px]">
-                Bridge te conecta con los equipos, servicios y soluciones de Macmillan Education, ofreciendo una experiencia unificada, ágil y orientada al valor.
+              <p className="mt-10 max-w-[690px] text-[20px] leading-[1.7] text-white/78 sm:text-[22px] lg:text-[24px]">
+                Centraliza soporte, recursos y operaciones en una experiencia corporativa única para equipos educativos que necesitan eficiencia, trazabilidad y una capa de servicio más elegante.
               </p>
             </div>
 
-            <div className="mt-10 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5 xl:gap-0">
-              {featureItems.map(({ icon: Icon, title, description, glow }) => (
-                <div
-                  key={title}
-                  className="flex flex-col items-center rounded-[22px] border border-white/12 bg-white/5 px-3 py-4 text-center backdrop-blur-[1px] xl:rounded-none xl:border-0 xl:bg-transparent xl:px-4 xl:py-0 xl:last:border-r-0"
-                >
-                  <div
-                    className={[
-                      "mb-4 flex h-16 w-16 items-center justify-center rounded-full border text-white",
-                      glow
-                        ? "border-sky-300/70 bg-sky-400/12 shadow-[0_0_0_4px_rgba(59,130,246,0.18),0_0_30px_rgba(56,189,248,0.18)]"
-                        : "border-white/30 bg-white/7",
-                    ].join(" ")}
-                  >
-                    <Icon className="h-7 w-7" strokeWidth={1.8} />
-                  </div>
-                  <h3 className="whitespace-pre-line text-[18px] font-semibold leading-[1.12] text-white lg:text-[20px]">
-                    {title}
-                  </h3>
-                  <p className="mt-2 whitespace-pre-line text-[13px] leading-[1.45] text-white/78 lg:text-[14px]">
-                    {description}
-                  </p>
-                </div>
-              ))}
-            </div>
+            <CapabilityMarquee />
           </section>
 
           <aside className="flex items-center justify-center">
