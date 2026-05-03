@@ -43,6 +43,7 @@ type CaptchaChallenge = {
 };
 
 const capabilityItems = ["Soporte", "Recursos", "Solicitud de asistencia", "Formación", "API externa"];
+const bridgeLetters = ["B", "r", "i", "d", "g", "e"];
 
 function readRecentLoginEmails() {
   try {
@@ -75,14 +76,22 @@ function HeroWordmark() {
       <div className="flex flex-wrap items-end gap-2 leading-none">
         <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
         <span className="relative inline-flex items-end text-[48px] font-bold tracking-[-0.06em] text-[#ff7a00] sm:text-[58px] lg:text-[80px]">
-          <span className="relative z-10 animate-[bridgeWordGlow_5.4s_ease-in-out_infinite] [text-shadow:0_0_0_rgba(255,122,0,0),0_8px_24px_rgba(255,122,0,0.14)]">
-            Bridge
+          <span className="relative z-10 inline-flex [text-shadow:0_8px_24px_rgba(255,122,0,0.14)]">
+            {bridgeLetters.map((letter, index) => (
+              <span
+                key={`${letter}-${index}`}
+                className="animate-[bridgeLetterGlow_5.6s_ease-in-out_infinite]"
+                style={{ animationDelay: `${index * 0.12}s` }}
+              >
+                {letter}
+              </span>
+            ))}
           </span>
-          <span className="pointer-events-none absolute inset-y-[20%] left-0 w-[16%] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,247,239,0.95),rgba(255,255,255,0))] opacity-0 blur-[1.5px] animate-[bridgeLetterSweep_5.4s_linear_infinite]" />
+          <span className="pointer-events-none absolute inset-y-[14%] left-[-2%] w-[14%] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,248,240,0.92),rgba(255,255,255,0))] opacity-0 blur-[1px] mix-blend-screen animate-[bridgeLetterSweep_5.6s_linear_infinite]" />
         </span>
       </div>
-      <div className="relative mt-5 h-[7px] w-[340px] max-w-full overflow-hidden rounded-full">
-        <div className="absolute inset-y-[1px] left-0 w-[176px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,225,198,0.95)_18%,rgba(255,122,0,0.98)_55%,rgba(255,225,198,0.9)_82%,rgba(255,255,255,0)_100%)] blur-[0.4px] animate-[bridgeSweep_5.4s_linear_infinite]" />
+      <div className="relative mt-5 h-[7px] w-[360px] max-w-full overflow-visible">
+        <div className="absolute inset-y-[1px] left-0 w-[188px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,233,214,0.96)_18%,rgba(255,122,0,0.98)_55%,rgba(255,233,214,0.94)_80%,rgba(255,255,255,0)_100%)] blur-[0.45px] animate-[bridgeSweep_5.6s_linear_infinite]" />
       </div>
       <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
@@ -282,34 +291,34 @@ export default function MacmillanLogin() {
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
       <style>{`
         @keyframes bridgeSweep {
-          0% { transform: translateX(-112%); opacity: 0; }
-          8% { opacity: 1; }
-          72% { transform: translateX(128%); opacity: 1; }
-          86% { opacity: 0; }
-          100% { transform: translateX(128%); opacity: 0; }
+          0% { transform: translateX(-108%); opacity: 0; }
+          10% { opacity: 1; }
+          66% { transform: translateX(126%); opacity: 1; }
+          82% { opacity: 0; }
+          100% { transform: translateX(126%); opacity: 0; }
         }
-        @keyframes bridgeWordGlow {
-          0%, 36%, 100% {
-            text-shadow: 0 0 0 rgba(255,122,0,0), 0 8px 24px rgba(255,122,0,0.14);
+        @keyframes bridgeLetterGlow {
+          0%, 34%, 100% {
+            text-shadow: 0 0 0 rgba(255,164,96,0), 0 8px 24px rgba(255,122,0,0.14);
             filter: brightness(1);
           }
-          50%, 64% {
-            text-shadow: 0 0 22px rgba(255,162,92,0.42), 0 10px 28px rgba(255,122,0,0.22);
-            filter: brightness(1.08);
+          48%, 62% {
+            text-shadow: 0 0 16px rgba(255,190,136,0.35), 0 10px 26px rgba(255,122,0,0.22);
+            filter: brightness(1.09);
           }
         }
         @keyframes bridgeLetterSweep {
-          0% { transform: translateX(-22%); opacity: 0; }
-          12% { opacity: 0; }
-          24% { opacity: 0.55; }
-          52% { transform: translateX(520%); opacity: 0.75; }
-          68% { opacity: 0.12; }
-          100% { transform: translateX(520%); opacity: 0; }
+          0% { transform: translateX(-34%); opacity: 0; }
+          16% { opacity: 0; }
+          28% { opacity: 0.48; }
+          56% { transform: translateX(640%); opacity: 0.66; }
+          70% { opacity: 0.08; }
+          100% { transform: translateX(640%); opacity: 0; }
         }
         @keyframes rayTravel {
           0% { transform: translateX(0); opacity: 0; }
-          8% { opacity: 0.9; }
-          88% { opacity: 0.25; }
+          10% { opacity: 0.72; }
+          84% { opacity: 0.18; }
           100% { transform: translateX(760%); opacity: 0; }
         }
         @keyframes capabilityMarquee {
