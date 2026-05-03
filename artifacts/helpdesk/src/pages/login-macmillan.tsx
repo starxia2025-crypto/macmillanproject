@@ -71,14 +71,14 @@ function writeRecentLoginEmails(email: string) {
 
 function HeroWordmark() {
   return (
-    <div className="max-w-[760px]">
-      <div className="flex max-w-full flex-wrap items-baseline gap-x-2 pb-5 leading-[1.02]">
-        <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
-        <span className="bridge-word inline-block translate-y-[0.02em] overflow-visible pb-[0.14em] pr-[0.04em] text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
+    <div className="max-w-[760px] min-w-0">
+      <div className="flex max-w-full flex-wrap items-baseline gap-x-1.5 pb-4 leading-[1.02] sm:gap-x-2 sm:pb-5">
+        <span className="text-[34px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
+        <span className="bridge-word inline-block translate-y-[0.02em] overflow-visible pb-[0.14em] pr-[0.04em] text-[34px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
           Bridge
         </span>
       </div>
-      <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
+      <p className="mt-6 text-[16px] font-medium leading-tight text-white/96 sm:mt-8 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
       </p>
     </div>
@@ -121,13 +121,13 @@ function CapabilityMarquee() {
   const marqueeItems = [...capabilityItems, ...capabilityItems, ...capabilityItems];
 
   return (
-    <div className="mt-12 w-full max-w-[760px] overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.05] px-3 py-3 shadow-[0_24px_80px_-52px_rgba(5,18,56,0.95)] backdrop-blur-md sm:px-4">
+    <div className="mt-10 w-full max-w-[760px] overflow-hidden rounded-[22px] border border-white/10 bg-white/[0.05] px-3 py-3 shadow-[0_24px_80px_-52px_rgba(5,18,56,0.95)] backdrop-blur-md sm:mt-12 sm:rounded-[24px] sm:px-4">
       <div className="flex overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_12%,black_88%,transparent)]">
-        <div className="flex min-w-max animate-[capabilityMarquee_26s_linear_infinite] items-center gap-4 sm:gap-5">
+        <div className="flex min-w-max animate-[capabilityMarquee_26s_linear_infinite] items-center gap-3.5 sm:gap-5">
           {marqueeItems.map((item, index) => (
             <div
               key={`${item}-${index}`}
-              className="flex items-center gap-4 text-sm font-medium tracking-[0.04em] text-white/76 sm:text-[15px]"
+              className="flex items-center gap-3.5 text-[13px] font-medium tracking-[0.03em] text-white/76 sm:gap-4 sm:text-[15px]"
             >
               <span className="whitespace-nowrap">{item}</span>
               <span className="text-white/28">{index === marqueeItems.length - 1 ? "" : "·"}</span>
@@ -326,15 +326,15 @@ export default function MacmillanLogin() {
           100% { transform: translateX(-33.333%); }
         }
       `}</style>
-      <div className="relative mx-auto flex min-h-dvh max-w-[1600px] flex-col px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
+      <div className="relative mx-auto flex min-h-dvh max-w-[1600px] min-w-0 flex-col px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
         <BackgroundRays />
 
         <div className="relative grid flex-1 gap-8 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-center lg:gap-10">
-          <section className="flex min-h-0 flex-col justify-between py-2 sm:py-4 lg:py-8">
-            <div className="max-w-[820px]">
+          <section className="flex min-h-0 min-w-0 flex-col justify-between py-2 sm:py-4 lg:py-8">
+            <div className="max-w-[820px] min-w-0">
               <HeroWordmark />
 
-              <p className="mt-8 max-w-[690px] text-[17px] leading-[1.75] text-white/78 sm:mt-10 sm:text-[20px] lg:text-[24px]">
+              <p className="mt-7 max-w-[690px] text-[15px] leading-[1.75] text-white/78 sm:mt-10 sm:text-[20px] lg:text-[24px]">
                 Bridge refuerza nuestro soporte con una plataforma centralizada diseñada para ofrecer a clientes clave una experiencia de atención más cercana, trazable y personalizada.
               </p>
             </div>
@@ -344,8 +344,8 @@ export default function MacmillanLogin() {
             </div>
           </section>
 
-          <aside className="flex items-start justify-center lg:items-center">
-            <div className="w-full max-w-[430px] rounded-[24px] border border-white/75 bg-white/98 p-5 shadow-[0_28px_80px_-36px_rgba(4,10,31,0.72)] sm:p-6 lg:rounded-[28px] lg:p-8">
+          <aside className="flex min-w-0 items-start justify-center lg:items-center">
+            <div className="w-full min-w-0 max-w-none rounded-[24px] border border-white/75 bg-white/98 p-5 shadow-[0_28px_80px_-36px_rgba(4,10,31,0.72)] sm:max-w-[430px] sm:p-6 lg:rounded-[28px] lg:p-8">
               <div className="text-center">
                 <h2 className="text-[36px] font-bold tracking-tight text-[#082c63] sm:text-[42px] lg:text-[56px]">Bienvenido</h2>
                 <p className="mt-2 text-[16px] text-slate-600 lg:text-[18px]">Inicia sesión para continuar</p>
