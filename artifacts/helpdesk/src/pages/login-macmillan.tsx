@@ -78,12 +78,11 @@ function HeroWordmark() {
           <span className="relative z-10 animate-[bridgeWordGlow_5.4s_ease-in-out_infinite] [text-shadow:0_0_0_rgba(255,122,0,0),0_8px_24px_rgba(255,122,0,0.14)]">
             Bridge
           </span>
-          <span className="pointer-events-none absolute inset-y-[8%] left-[-8%] right-[-6%] rounded-[999px] bg-[linear-gradient(102deg,rgba(255,255,255,0)_0%,rgba(255,244,231,0.02)_18%,rgba(255,255,255,0.68)_48%,rgba(255,196,145,0.28)_62%,rgba(255,255,255,0)_92%)] opacity-75 blur-[6px] animate-[bridgeWordSheen_5.4s_linear_infinite]" />
+          <span className="pointer-events-none absolute inset-y-[20%] left-0 w-[16%] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,247,239,0.95),rgba(255,255,255,0))] opacity-0 blur-[1.5px] animate-[bridgeLetterSweep_5.4s_linear_infinite]" />
         </span>
       </div>
       <div className="relative mt-5 h-[7px] w-[340px] max-w-full overflow-hidden rounded-full">
-        <div className="absolute inset-y-[2px] left-0 right-0 rounded-full bg-white/8" />
-        <div className="absolute inset-y-[1px] left-0 w-[170px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,207,170,0.55)_18%,rgba(255,122,0,0.98)_54%,rgba(255,216,186,0.72)_78%,rgba(255,255,255,0)_100%)] blur-[0.6px] animate-[bridgeSweep_5.4s_linear_infinite]" />
+        <div className="absolute inset-y-[1px] left-0 w-[176px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,225,198,0.95)_18%,rgba(255,122,0,0.98)_55%,rgba(255,225,198,0.9)_82%,rgba(255,255,255,0)_100%)] blur-[0.4px] animate-[bridgeSweep_5.4s_linear_infinite]" />
       </div>
       <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
@@ -283,28 +282,29 @@ export default function MacmillanLogin() {
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
       <style>{`
         @keyframes bridgeSweep {
-          0% { transform: translateX(-105%); opacity: 0; }
+          0% { transform: translateX(-112%); opacity: 0; }
           8% { opacity: 1; }
-          58% { transform: translateX(118%); opacity: 1; }
-          74% { opacity: 0; }
-          100% { transform: translateX(118%); opacity: 0; }
+          72% { transform: translateX(128%); opacity: 1; }
+          86% { opacity: 0; }
+          100% { transform: translateX(128%); opacity: 0; }
         }
         @keyframes bridgeWordGlow {
-          0%, 34%, 100% {
+          0%, 36%, 100% {
             text-shadow: 0 0 0 rgba(255,122,0,0), 0 8px 24px rgba(255,122,0,0.14);
             filter: brightness(1);
           }
-          46%, 58% {
+          50%, 64% {
             text-shadow: 0 0 22px rgba(255,162,92,0.42), 0 10px 28px rgba(255,122,0,0.22);
             filter: brightness(1.08);
           }
         }
-        @keyframes bridgeWordSheen {
-          0% { transform: translateX(-42%) skewX(-14deg); opacity: 0; }
-          12% { opacity: 0.18; }
-          42% { transform: translateX(8%) skewX(-14deg); opacity: 0.72; }
-          58% { transform: translateX(24%) skewX(-14deg); opacity: 0.26; }
-          100% { transform: translateX(42%) skewX(-14deg); opacity: 0; }
+        @keyframes bridgeLetterSweep {
+          0% { transform: translateX(-22%); opacity: 0; }
+          12% { opacity: 0; }
+          24% { opacity: 0.55; }
+          52% { transform: translateX(520%); opacity: 0.75; }
+          68% { opacity: 0.12; }
+          100% { transform: translateX(520%); opacity: 0; }
         }
         @keyframes rayTravel {
           0% { transform: translateX(0); opacity: 0; }
