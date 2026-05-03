@@ -273,7 +273,7 @@ export default function MacmillanLogin() {
   }
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
+    <div className="min-h-dvh overflow-x-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
       <style>{`
         .bridge-word {
           color: transparent;
@@ -326,31 +326,33 @@ export default function MacmillanLogin() {
           100% { transform: translateX(-33.333%); }
         }
       `}</style>
-      <div className="relative mx-auto flex min-h-screen max-w-[1600px] flex-col px-4 py-4 lg:px-6 lg:py-5">
+      <div className="relative mx-auto flex min-h-dvh max-w-[1600px] flex-col px-4 py-4 sm:px-5 lg:px-6 lg:py-5">
         <BackgroundRays />
 
-        <div className="relative grid flex-1 gap-6 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-center lg:gap-10">
-          <section className="flex min-h-0 flex-col justify-between py-4 lg:py-8">
+        <div className="relative grid flex-1 gap-8 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-center lg:gap-10">
+          <section className="flex min-h-0 flex-col justify-between py-2 sm:py-4 lg:py-8">
             <div className="max-w-[820px]">
               <HeroWordmark />
 
-              <p className="mt-10 max-w-[690px] text-[20px] leading-[1.7] text-white/78 sm:text-[22px] lg:text-[24px]">
+              <p className="mt-8 max-w-[690px] text-[17px] leading-[1.75] text-white/78 sm:mt-10 sm:text-[20px] lg:text-[24px]">
                 Bridge refuerza nuestro soporte con una plataforma centralizada diseñada para ofrecer a clientes clave una experiencia de atención más cercana, trazable y personalizada.
               </p>
             </div>
 
-            <CapabilityMarquee />
+            <div className="mt-8 sm:mt-10">
+              <CapabilityMarquee />
+            </div>
           </section>
 
-          <aside className="flex items-center justify-center">
-            <div className="w-full rounded-[28px] border border-white/75 bg-white/98 p-7 shadow-[0_28px_80px_-36px_rgba(4,10,31,0.72)] lg:p-8">
+          <aside className="flex items-start justify-center lg:items-center">
+            <div className="w-full max-w-[430px] rounded-[24px] border border-white/75 bg-white/98 p-5 shadow-[0_28px_80px_-36px_rgba(4,10,31,0.72)] sm:p-6 lg:rounded-[28px] lg:p-8">
               <div className="text-center">
-                <h2 className="text-[42px] font-bold tracking-tight text-[#082c63] lg:text-[56px]">Bienvenido</h2>
+                <h2 className="text-[36px] font-bold tracking-tight text-[#082c63] sm:text-[42px] lg:text-[56px]">Bienvenido</h2>
                 <p className="mt-2 text-[16px] text-slate-600 lg:text-[18px]">Inicia sesión para continuar</p>
               </div>
 
               <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="mt-8 space-y-5">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="mt-7 space-y-5 lg:mt-8">
                   {loginMutation.isError && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                       {getLoginErrorMessage()}
@@ -491,8 +493,8 @@ export default function MacmillanLogin() {
           </aside>
         </div>
 
-        <footer className="relative mt-4 rounded-[18px] bg-[#07245d]/92 px-5 py-4 text-white backdrop-blur-sm">
-          <div className="flex flex-col items-center justify-between gap-3 text-center text-[14px] lg:flex-row lg:text-left lg:text-[15px]">
+        <footer className="relative mt-6 rounded-[18px] bg-[#07245d]/92 px-4 py-4 text-white backdrop-blur-sm sm:px-5">
+          <div className="flex flex-col items-center justify-between gap-3 text-center text-[13px] sm:text-[14px] lg:flex-row lg:text-left lg:text-[15px]">
             <div className="flex items-center gap-3">
               <img src={meeLogo} alt="Macmillan Education" className="h-7 w-auto brightness-0 invert" />
               <span className="font-medium">macmillan education</span>
