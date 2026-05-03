@@ -43,7 +43,6 @@ type CaptchaChallenge = {
 };
 
 const capabilityItems = ["Soporte", "Recursos", "Solicitud de asistencia", "Formación", "API externa"];
-const bridgeLetters = ["B", "r", "i", "d", "g", "e"];
 
 function readRecentLoginEmails() {
   try {
@@ -73,25 +72,14 @@ function writeRecentLoginEmails(email: string) {
 function HeroWordmark() {
   return (
     <div className="max-w-[760px]">
-      <div className="flex flex-wrap items-end gap-2 leading-none">
-        <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
-        <span className="relative inline-flex items-end text-[48px] font-bold tracking-[-0.06em] text-[#ff7a00] sm:text-[58px] lg:text-[80px]">
-          <span className="relative z-10 inline-flex [text-shadow:0_8px_24px_rgba(255,122,0,0.14)]">
-            {bridgeLetters.map((letter, index) => (
-              <span
-                key={`${letter}-${index}`}
-                className="animate-[bridgeLetterGlow_5.6s_ease-in-out_infinite]"
-                style={{ animationDelay: `${index * 0.12}s` }}
-              >
-                {letter}
-              </span>
-            ))}
-          </span>
-          <span className="pointer-events-none absolute inset-y-[14%] left-[-2%] w-[14%] bg-[linear-gradient(90deg,rgba(255,255,255,0),rgba(255,248,240,0.92),rgba(255,255,255,0))] opacity-0 blur-[1px] mix-blend-screen animate-[bridgeLetterSweep_5.6s_linear_infinite]" />
+      <div className="inline-grid max-w-full grid-cols-[auto_auto] items-end gap-x-2 leading-none">
+        <span className="col-start-1 row-start-1 text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
+        <span className="bridge-word col-start-2 row-start-1 text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
+          Bridge
         </span>
-      </div>
-      <div className="relative mt-5 h-[7px] w-[360px] max-w-full overflow-visible">
-        <div className="absolute inset-y-[1px] left-0 w-[188px] rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0)_0%,rgba(255,233,214,0.96)_18%,rgba(255,122,0,0.98)_55%,rgba(255,233,214,0.94)_80%,rgba(255,255,255,0)_100%)] blur-[0.45px] animate-[bridgeSweep_5.6s_linear_infinite]" />
+        <div className="bridge-underline-track col-start-2 row-start-2 mt-4 h-[7px] w-full max-w-full">
+          <div className="bridge-underline-flash h-full w-[62%] rounded-full" />
+        </div>
       </div>
       <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
@@ -290,30 +278,70 @@ export default function MacmillanLogin() {
   return (
     <div className="min-h-screen overflow-hidden bg-[linear-gradient(115deg,#041955_0%,#072a82_30%,#0f42b0_64%,#2d7fff_100%)]">
       <style>{`
-        @keyframes bridgeSweep {
-          0% { transform: translateX(-108%); opacity: 0; }
-          10% { opacity: 1; }
-          66% { transform: translateX(126%); opacity: 1; }
-          82% { opacity: 0; }
-          100% { transform: translateX(126%); opacity: 0; }
+        .bridge-word {
+          color: transparent;
+          background-image:
+            linear-gradient(90deg,
+              #ff7a00 0%,
+              #ff8510 22%,
+              #ffd1a3 34%,
+              #ff9a32 44%,
+              #ff7a00 56%,
+              #ff8a18 70%,
+              #ffd9b5 82%,
+              #ff7a00 100%);
+          background-size: 240% 100%;
+          background-position: 115% 50%;
+          -webkit-background-clip: text;
+          background-clip: text;
+          filter: drop-shadow(0 8px 22px rgba(255,122,0,0.18));
+          animation:
+            bridgeInnerGlow 5.8s cubic-bezier(0.42, 0, 0.18, 1) infinite,
+            bridgePulse 5.8s ease-in-out infinite;
         }
-        @keyframes bridgeLetterGlow {
-          0%, 34%, 100% {
-            text-shadow: 0 0 0 rgba(255,164,96,0), 0 8px 24px rgba(255,122,0,0.14);
-            filter: brightness(1);
+        .bridge-underline-track {
+          position: relative;
+          overflow: visible;
+        }
+        .bridge-underline-flash {
+          background: linear-gradient(
+            90deg,
+            rgba(255,255,255,0) 0%,
+            rgba(255,227,204,0.95) 18%,
+            rgba(255,122,0,0.98) 52%,
+            rgba(255,229,208,0.92) 80%,
+            rgba(255,255,255,0) 100%
+          );
+          filter: blur(0.45px);
+          transform: translateX(-118%);
+          opacity: 0;
+          animation: bridgeUnderlineTravel 5.8s linear infinite;
+        }
+        @keyframes bridgeUnderlineTravel {
+          0% { transform: translateX(-118%); opacity: 0; }
+          8% { opacity: 1; }
+          62% { transform: translateX(62%); opacity: 1; }
+          78% { transform: translateX(62%); opacity: 1; }
+          100% { transform: translateX(62%); opacity: 0; }
+        }
+        @keyframes bridgeInnerGlow {
+          0%, 18% {
+            background-position: 118% 50%;
           }
-          48%, 62% {
-            text-shadow: 0 0 16px rgba(255,190,136,0.35), 0 10px 26px rgba(255,122,0,0.22);
-            filter: brightness(1.09);
+          56%, 74% {
+            background-position: 0% 50%;
+          }
+          100% {
+            background-position: 0% 50%;
           }
         }
-        @keyframes bridgeLetterSweep {
-          0% { transform: translateX(-34%); opacity: 0; }
-          16% { opacity: 0; }
-          28% { opacity: 0.48; }
-          56% { transform: translateX(640%); opacity: 0.66; }
-          70% { opacity: 0.08; }
-          100% { transform: translateX(640%); opacity: 0; }
+        @keyframes bridgePulse {
+          0%, 54%, 100% {
+            filter: drop-shadow(0 8px 22px rgba(255,122,0,0.18)) brightness(1);
+          }
+          63%, 74% {
+            filter: drop-shadow(0 10px 28px rgba(255,122,0,0.24)) brightness(1.08);
+          }
         }
         @keyframes rayTravel {
           0% { transform: translateX(0); opacity: 0; }
