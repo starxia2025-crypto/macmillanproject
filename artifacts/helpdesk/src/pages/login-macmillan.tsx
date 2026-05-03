@@ -72,14 +72,11 @@ function writeRecentLoginEmails(email: string) {
 function HeroWordmark() {
   return (
     <div className="max-w-[760px]">
-      <div className="inline-grid max-w-full grid-cols-[auto_auto] items-end gap-x-2 leading-none">
+      <div className="inline-grid max-w-full grid-cols-[auto_auto] items-end gap-x-2 pb-2 leading-none">
         <span className="col-start-1 row-start-1 text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
-        <span className="bridge-word col-start-2 row-start-1 text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
+        <span className="bridge-word col-start-2 row-start-1 pb-[0.08em] text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
           Bridge
         </span>
-        <div className="bridge-underline-track col-start-2 row-start-2 mt-4 h-[7px] w-full max-w-full">
-          <div className="bridge-underline-flash h-full w-[62%] rounded-full" />
-        </div>
       </div>
       <p className="mt-8 text-[23px] font-medium leading-tight text-white/96 sm:text-[28px] lg:text-[34px]">
         Plataforma de soporte y servicios
@@ -298,31 +295,6 @@ export default function MacmillanLogin() {
           animation:
             bridgeInnerGlow 5.8s cubic-bezier(0.42, 0, 0.18, 1) infinite,
             bridgePulse 5.8s ease-in-out infinite;
-        }
-        .bridge-underline-track {
-          position: relative;
-          overflow: visible;
-        }
-        .bridge-underline-flash {
-          background: linear-gradient(
-            90deg,
-            rgba(255,255,255,0) 0%,
-            rgba(255,227,204,0.95) 18%,
-            rgba(255,122,0,0.98) 52%,
-            rgba(255,229,208,0.92) 80%,
-            rgba(255,255,255,0) 100%
-          );
-          filter: blur(0.45px);
-          transform: translateX(-118%);
-          opacity: 0;
-          animation: bridgeUnderlineTravel 5.8s linear infinite;
-        }
-        @keyframes bridgeUnderlineTravel {
-          0% { transform: translateX(-118%); opacity: 0; }
-          8% { opacity: 1; }
-          62% { transform: translateX(62%); opacity: 1; }
-          78% { transform: translateX(62%); opacity: 1; }
-          100% { transform: translateX(62%); opacity: 0; }
         }
         @keyframes bridgeInnerGlow {
           0%, 18% {
