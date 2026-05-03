@@ -72,9 +72,9 @@ function writeRecentLoginEmails(email: string) {
 function HeroWordmark() {
   return (
     <div className="max-w-[760px]">
-      <div className="flex max-w-full flex-wrap items-baseline gap-x-2 pb-4 leading-[0.96]">
+      <div className="flex max-w-full flex-wrap items-baseline gap-x-2 pb-5 leading-[1.02]">
         <span className="text-[48px] font-semibold tracking-[-0.05em] text-white sm:text-[58px] lg:text-[80px]">Macmillan</span>
-        <span className="bridge-word translate-y-[0.02em] text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
+        <span className="bridge-word inline-block translate-y-[0.02em] overflow-visible pb-[0.14em] text-[48px] font-bold tracking-[-0.06em] sm:text-[58px] lg:text-[80px]">
           Bridge
         </span>
       </div>
