@@ -26,6 +26,10 @@ const INVALID_CREDENTIALS_MESSAGE = "Credenciales no validas";
 const MIN_PASSWORD_LENGTH = 12;
 const RESET_PASSWORD_EXPIRES_MINUTES = 30;
 
+function useSecureSessionCookie() {
+  return process.env.COOKIE_SECURE === "true";
+}
+
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
@@ -507,7 +511,7 @@ router.post("/login", async (req, res) => {
 
   res.cookie(SESSION_COOKIE, sessionToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureSessionCookie(),
     sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
@@ -529,7 +533,11 @@ router.post("/logout", requireAuth, async (req, res) => {
   if (token) {
     await deleteSession(token);
   }
-  res.clearCookie(SESSION_COOKIE);
+  res.clearCookie(SESSION_COOKIE, {
+    httpOnly: true,
+    secure: useSecureSessionCookie(),
+    sameSite: "lax",
+  });
   res.json({ message: "Sesion cerrada" });
 });
 
@@ -822,7 +830,7 @@ router.get("/microsoft/callback", async (req, res) => {
     const sessionToken = await createSession(user.id);
     res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: useSecureSessionCookie(),
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
